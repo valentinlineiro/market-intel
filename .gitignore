@@ -1,0 +1,5 @@
+market_intel.db
+logs/
+__pycache__/
+*.pyc
+.env

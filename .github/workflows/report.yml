@@ -1,0 +1,56 @@
+name: Report — Dashboard
+
+on:
+  workflow_dispatch:
+    inputs:
+      segment:
+        description: "Filtrar por segmento (opcional)"
+        required: false
+        type: choice
+        options:
+          - ""
+          - dentista
+          - docente_universitario
+          - abogado_autonomo
+          - arquitecto
+
+permissions:
+  contents: read
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Restaurar DB desde rama data
+        run: |
+          if git ls-remote --exit-code origin data; then
+            git fetch origin data --depth=1
+            git checkout FETCH_HEAD -- market_intel.db
+          else
+            echo "Sin DB todavía. Ejecuta primero el collector."
+            exit 1
+          fi
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: Mostrar dashboard
+        run: |
+          ARGS=""
+          if [ -n "${{ inputs.segment }}" ]; then
+            ARGS="--segment ${{ inputs.segment }}"
+          fi
+          python report.py $ARGS --json | python -m json.tool
+        env:
+          PYTHONUNBUFFERED: "1"
