@@ -1,0 +1,21 @@
+name = "market-intel"
+pages_build_output_dir = "dist"
+
+# ── KV Namespace ──────────────────────────────────────────────────────────
+# Setup:
+#   1. wrangler kv:namespace create LEADS_KV
+#   2. Copia el "id" que devuelve al campo id de abajo
+#   3. Para preview local: wrangler kv:namespace create LEADS_KV --preview
+#      y copia el preview_id
+
+[[kv_namespaces]]
+binding    = "LEADS_KV"
+id         = ""           # ← rellenar tras: wrangler kv:namespace create LEADS_KV
+preview_id = ""           # ← rellenar tras: wrangler kv:namespace create LEADS_KV --preview
+
+# ── Variables de entorno (secrets) ───────────────────────────────────────
+# NO pongas valores aquí. Configúralas con:
+#   wrangler pages secret put TELEGRAM_TOKEN
+#   wrangler pages secret put TELEGRAM_CHAT_ID
+#
+# O desde Cloudflare Dashboard → Pages → market-intel → Settings → Environment variables
