@@ -1,18 +1,15 @@
 """
 synthesize.py
 
-Genera copy de landing a partir de señales reales de dolor usando Claude.
-El copy resultante usa el lenguaje exacto de los profesionales, no marketing genérico.
-
-Requiere:
-  ANTHROPIC_API_KEY — en .env o en entorno
+Genera copy de landing a partir de señales reales de dolor.
+Usa llm.py para seleccionar automáticamente el provider disponible
+(Groq gratis → OpenRouter gratis → Anthropic de pago).
 
 Uso:
   python synthesize.py --segment dentista
   python synthesize.py --segment dentista --dry-run  # imprime sin guardar
 """
 
-import os
 import sys
 import json
 import logging
@@ -20,18 +17,14 @@ import argparse
 from collections import Counter
 from pathlib import Path
 
-import requests
-
 sys.path.insert(0, str(Path(__file__).parent))
 
+import llm
 from schema import SEGMENTS
 from db.database import get_signals, init_db
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [synthesize] %(message)s")
-
-ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
-CLAUDE_MODEL      = "claude-sonnet-4-20250514"
 
 SYNTHESIS_PROMPT = """\
 Eres un copywriter B2B especializado en SaaS para profesionales autónomos españoles.
@@ -59,28 +52,6 @@ Devuelve ÚNICAMENTE JSON válido, sin texto previo ni backticks:
 {{"headline":"...","subtitle":"...","benefits":[{{"title":"...","desc":"...","emoji":"..."}},{{"title":"...","desc":"...","emoji":"..."}},{{"title":"...","desc":"...","emoji":"..."}}],"cta":"..."}}
 """
 
-
-def _call_claude(prompt: str) -> str:
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not api_key:
-        raise RuntimeError("ANTHROPIC_API_KEY no configurada")
-
-    resp = requests.post(
-        ANTHROPIC_API_URL,
-        headers={
-            "x-api-key": api_key,
-            "anthropic-version": "2023-06-01",
-            "content-type": "application/json",
-        },
-        json={
-            "model": CLAUDE_MODEL,
-            "max_tokens": 1024,
-            "messages": [{"role": "user", "content": prompt}],
-        },
-        timeout=30,
-    )
-    resp.raise_for_status()
-    return resp.json()["content"][0]["text"]
 
 
 def synthesize_copy(segment: str, signals: list[dict]) -> dict:
@@ -137,8 +108,8 @@ def synthesize_copy(segment: str, signals: list[dict]) -> dict:
         deadline_note=deadline_note,
     )
 
-    log.info(f"  Llamando Claude ({len(signal_texts)} señales, top_kw: {top_keywords[:50]})...")
-    raw = _call_claude(prompt).strip()
+    log.info(f"  [{llm.active_provider()}] Sintetizando copy ({len(signal_texts)} señales, top_kw: {top_keywords[:50]})...")
+    raw = llm.call(prompt).strip()
 
     # Limpiar backticks que a veces añade el modelo
     if raw.startswith("```"):
