@@ -285,6 +285,7 @@ def main():
 
     html = generate_html(stats, opps, signals)
     out = Path(args.out) / "index.html"
+    out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(html, encoding="utf-8")
     print(f"Dashboard generado: {out} ({len(html):,} bytes)")
 
