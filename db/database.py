@@ -26,7 +26,6 @@ def get_conn() -> sqlite3.Connection:
 def init_db():
     with get_conn() as conn:
         conn.executescript(DDL)
-    print(f"[db] Inicializada en {DB_PATH}")
 
 
 def insert_signal(s: Signal) -> bool:
