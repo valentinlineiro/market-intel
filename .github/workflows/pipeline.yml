@@ -1,0 +1,50 @@
+name: Pipeline
+
+on:
+  schedule:
+    - cron: "0 7 * * 1"   # Lunes 7am UTC (8am España invierno, 9am verano)
+  workflow_dispatch:        # Ejecución manual desde GitHub UI
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write       # necesario para commitear la DB de vuelta
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install wrangler
+        run: npm install -g wrangler
+
+      - name: Run pipeline
+        env:
+          GROQ_API_KEY:          ${{ secrets.GROQ_API_KEY }}
+          OPENROUTER_API_KEY:    ${{ secrets.OPENROUTER_API_KEY }}
+          ANTHROPIC_API_KEY:     ${{ secrets.ANTHROPIC_API_KEY }}
+          REDDIT_CLIENT_ID:      ${{ secrets.REDDIT_CLIENT_ID }}
+          REDDIT_CLIENT_SECRET:  ${{ secrets.REDDIT_CLIENT_SECRET }}
+          REDDIT_USER_AGENT:     "market-intel/0.1 by valentinlineiro"
+          TELEGRAM_BOT_TOKEN:    ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:      ${{ secrets.TELEGRAM_CHAT_ID }}
+          CF_PAGES_PROJECT:      ${{ secrets.CF_PAGES_PROJECT }}
+          CF_PAGES_DOMAIN:       ${{ secrets.CF_PAGES_DOMAIN }}
+          CLOUDFLARE_API_TOKEN:  ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: python pipeline.py
+
+      - name: Commit DB
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add market_intel.db dist/ || true
+          git diff --cached --quiet || git commit -m "chore: pipeline run $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          git push

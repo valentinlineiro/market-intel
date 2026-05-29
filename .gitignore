@@ -1,5 +1,9 @@
-market_intel.db
+# La DB se commitea automáticamente por GitHub Actions para persistencia entre runs.
+# Solo contiene señales públicas (Reddit, GNews). Sin datos personales.
+# Si quieres ignorarla localmente: git update-index --assume-unchanged market_intel.db
+!market_intel.db
 logs/
 __pycache__/
 *.pyc
 .env
+dist/
