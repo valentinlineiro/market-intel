@@ -1,21 +1,17 @@
 name = "market-intel"
 pages_build_output_dir = "dist"
 
-# ── KV Namespace ──────────────────────────────────────────────────────────
+# ── D1 Database ───────────────────────────────────────────────────────────
 # Setup:
-#   1. wrangler kv:namespace create LEADS_KV
-#   2. Copia el "id" que devuelve al campo id de abajo
-#   3. Para preview local: wrangler kv:namespace create LEADS_KV --preview
-#      y copia el preview_id
+#   1. wrangler d1 create market-intel
+#   2. Copia el database_id al campo id de abajo
+#   3. wrangler d1 execute market-intel --file=schema.sql
 
-[[kv_namespaces]]
-binding    = "LEADS_KV"
-id         = ""           # ← rellenar tras: wrangler kv:namespace create LEADS_KV
-preview_id = ""           # ← rellenar tras: wrangler kv:namespace create LEADS_KV --preview
+[[d1_databases]]
+binding     = "DB"
+database_name = "market-intel"
+database_id = ""          # ← rellenar tras: wrangler d1 create market-intel
 
 # ── Variables de entorno (secrets) ───────────────────────────────────────
-# NO pongas valores aquí. Configúralas con:
-#   wrangler pages secret put TELEGRAM_TOKEN
-#   wrangler pages secret put TELEGRAM_CHAT_ID
-#
-# O desde Cloudflare Dashboard → Pages → market-intel → Settings → Environment variables
+# wrangler pages secret put TELEGRAM_TOKEN
+# wrangler pages secret put TELEGRAM_CHAT_ID
