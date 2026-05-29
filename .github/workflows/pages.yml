@@ -52,7 +52,9 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Generar dashboard HTML
-        run: python report_html.py --out _site
+        run: |
+          python report_html.py --out _site
+          cp landing_*.html _site/ 2>/dev/null || true
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

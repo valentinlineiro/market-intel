@@ -115,6 +115,20 @@ def render_opportunity_card(o: dict) -> str:
     pain = o.get("pain_summary") or "—"
     signals = o.get("signal_count", 0)
 
+    landing_url = o.get("landing_url")
+    landing_link = ""
+    if o.get("status") == "testing" and landing_url:
+        landing_link = f"""
+      <div style="margin-top:12px;padding-top:12px;border-top:1px dashed #1e293b;
+                  display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-size:0.75rem;color:#f59e0b;font-weight:600;">✉ {o.get("emails_captured", 0)} leads</span>
+        <a href="./{landing_url}" target="_blank" 
+           style="color:#06b6d4;font-size:0.75rem;text-decoration:none;font-weight:600;
+                  display:flex;align-items:center;gap:4px;">
+          🔗 Ver Landing Page &rarr;
+        </a>
+      </div>"""
+
     return f"""
     <div style="background:#0f172a;border:1px solid #1e293b;border-radius:12px;padding:20px;
                 position:relative;overflow:hidden;">
@@ -135,6 +149,7 @@ def render_opportunity_card(o: dict) -> str:
         <span style="font-size:0.7rem;color:#475569;">{signals} señales</span>
         {deadline_badge}
       </div>
+      {landing_link}
     </div>"""
 
 

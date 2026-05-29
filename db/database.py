@@ -71,7 +71,9 @@ def upsert_opportunity(o: Opportunity):
             signal_count   = excluded.signal_count,
             last_updated   = excluded.last_updated,
             status         = excluded.status,
-            emails_captured= excluded.emails_captured
+            emails_captured= excluded.emails_captured,
+            landing_url    = excluded.landing_url,
+            validation_deadline = excluded.validation_deadline
     """
     with get_conn() as conn:
         conn.execute(sql, (

@@ -99,6 +99,21 @@ def render_summary(stats: dict):
         )
         lines.append(f"[bold]Por segmento:[/bold]    {seg_parts}")
 
+    # Consultar experimentos de validación activos
+    from db.database import get_conn
+    try:
+        with get_conn() as conn:
+            testing_opps = conn.execute(
+                "SELECT segment, emails_captured, landing_url FROM opportunities WHERE status = 'testing'"
+            ).fetchall()
+        if testing_opps:
+            v_parts = []
+            for o in testing_opps:
+                v_parts.append(f"[yellow]{o['segment']}[/yellow] (✉ [bold]{o['emails_captured']}[/bold] leads, [dim]{o['landing_url']}[/dim])")
+            lines.append(f"[bold]En validación:[/bold]   " + " | ".join(v_parts))
+    except Exception:
+        pass
+
     console.print(Panel("\n".join(lines), title="[bold]Market Intel — Resumen[/bold]",
                         border_style="bright_blue"))
 
@@ -142,12 +157,27 @@ def render_opportunities(opps: list[dict], segment_filter: str | None = None):
 
         score_str = Text(f"{score:.2f}/10", style=score_color(score))
 
+        status_cell = status_badge(o.get("status", "watching"))
+        if o.get("status") == "testing":
+            emails = o.get("emails_captured", 0)
+            status_cell = Text.assemble(
+                status_cell,
+                f"\n",
+                Text(f"✉ {emails} leads", style="bold yellow"),
+            )
+            if o.get("landing_url"):
+                status_cell = Text.assemble(
+                    status_cell,
+                    f"\n",
+                    Text(o["landing_url"], style="dim italic"),
+                )
+
         table.add_row(
             seg_label,
             score_str,
             breakdown_str,
             str(o.get("signal_count", 0)),
-            status_badge(o.get("status", "watching")),
+            status_cell,
             Text(o.get("pain_summary", "—") or "—", overflow="fold"),
         )
 
@@ -270,6 +300,41 @@ def main():
     render_signals(signals, limit=args.signals, segment_filter=args.segment)
 
     console.rule(f"[dim]{datetime.now(timezone.utc).replace(tzinfo=None).strftime('%Y-%m-%d %H:%M UTC')}[/dim]")
+
+    # Asistente interactivo de validación de dolor
+    if not args.as_json and sys.stdin.isatty():
+        try:
+            console.print()
+            ans = console.input("[bold yellow]💡 ¿Deseas validar algún segmento autogenerando su Landing Page? (s/n): [/bold yellow]").strip().lower()
+            if ans == 's':
+                # Listar segmentos
+                console.print("\n[bold cyan]Selecciona el segmento a validar:[/bold cyan]")
+                active_segments = list(SEGMENTS.keys())
+                for o in opps:
+                    if o["segment"] not in active_segments:
+                        active_segments.append(o["segment"])
+                
+                for idx, seg in enumerate(active_segments, 1):
+                    label = SEGMENTS.get(seg, {}).get("label", seg.replace("_", " ").capitalize())
+                    console.print(f"  [[bold cyan]{idx}[/bold cyan]] {label} ({seg})")
+                
+                sel = console.input("\nIntroduce el número del segmento: ").strip()
+                if sel.isdigit() and 1 <= int(sel) <= len(active_segments):
+                    target_seg = active_segments[int(sel) - 1]
+                    label = SEGMENTS.get(target_seg, {}).get("label", target_seg.replace("_", " ").capitalize())
+                    
+                    filename = f"landing_{target_seg}.html"
+                    console.print(f"\n[cyan]🛠️ Generando landing page para '{label}'...[/cyan]")
+                    
+                    from generate_landing import generate_landing_html, promote_to_testing
+                    _, filepath = generate_landing_html(target_seg)
+                    promote_to_testing(target_seg, filename, label=label)
+                    
+                    console.print(f"\n[bold green]✨ ¡Hecho! Landing page generada con éxito en {filepath.name} y promovida en la DB.[/bold green]")
+                else:
+                    console.print("[red]Selección no válida.[/red]")
+        except KeyboardInterrupt:
+            console.print("\n[yellow]Asistente cancelado.[/yellow]")
 
 
 if __name__ == "__main__":
