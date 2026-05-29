@@ -62,18 +62,19 @@ def upsert_opportunity(o: Opportunity):
         INSERT INTO opportunities
         (id, segment, pain_summary, score, score_breakdown, signal_ids,
          signal_count, first_seen, last_updated, status, landing_url,
-         emails_captured, validation_deadline)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+         emails_captured, validation_deadline, telegram_alerted_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ON CONFLICT(id) DO UPDATE SET
-            score          = excluded.score,
-            score_breakdown= excluded.score_breakdown,
-            signal_ids     = excluded.signal_ids,
-            signal_count   = excluded.signal_count,
-            last_updated   = excluded.last_updated,
-            status         = excluded.status,
-            emails_captured= excluded.emails_captured,
-            landing_url    = excluded.landing_url,
-            validation_deadline = excluded.validation_deadline
+            score               = excluded.score,
+            score_breakdown     = excluded.score_breakdown,
+            signal_ids          = excluded.signal_ids,
+            signal_count        = excluded.signal_count,
+            last_updated        = excluded.last_updated,
+            status              = excluded.status,
+            emails_captured     = excluded.emails_captured,
+            landing_url         = excluded.landing_url,
+            validation_deadline = excluded.validation_deadline,
+            telegram_alerted_at = excluded.telegram_alerted_at
     """
     with get_conn() as conn:
         conn.execute(sql, (
@@ -90,6 +91,7 @@ def upsert_opportunity(o: Opportunity):
             o.landing_url,
             o.emails_captured,
             o.validation_deadline.isoformat() if o.validation_deadline else None,
+            o.telegram_alerted_at.isoformat() if o.telegram_alerted_at else None,
         ))
 
 
@@ -103,6 +105,17 @@ def get_signals(segment: Optional[str] = None, limit: int = 100) -> list[dict]:
     params.append(limit)
     with get_conn() as conn:
         return [dict(r) for r in conn.execute(sql, params).fetchall()]
+
+
+def get_signal_count(segment: Optional[str] = None) -> int:
+    """Devuelve el total real de señales en DB (sin límite de query)."""
+    sql = "SELECT COUNT(*) FROM signals"
+    params = []
+    if segment:
+        sql += " WHERE segment = ?"
+        params.append(segment)
+    with get_conn() as conn:
+        return conn.execute(sql, params).fetchone()[0]
 
 
 def get_opportunities(status: Optional[str] = None) -> list[dict]:

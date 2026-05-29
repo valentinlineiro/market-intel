@@ -32,6 +32,7 @@ SEGMENTS = {
             "seguros dentales", "cuadro médico", "aseguradora",
         ],
         "active_deadline": "2026-01-01",        # RRSIF obligatorio
+        "competition_proxy": 4.0,               # Clinic Cloud + Gesden con cuota alta
         "notes": "Deadline fiscal activo. Multas hasta 50k€. Mercado nacional.",
     },
 
@@ -52,6 +53,7 @@ SEGMENTS = {
             "plaza", "concurso oposición", "estancias",
         ],
         "active_deadline": None,                # Proceso continuo, siempre activo
+        "competition_proxy": 8.5,               # No hay solución clara para ANECA/Docentia
         "notes": "Dolor articulado públicamente. Proceso hasta 1 año de espera.",
     },
 
@@ -72,6 +74,7 @@ SEGMENTS = {
             "pleito", "juzgado", "notificaciones",
         ],
         "active_deadline": None,
+        "competition_proxy": 6.0,               # LexNet problemático; mercado fragmentado
         "notes": "Dolor crónico gestión fiscal/admin. Muy fragmentado.",
     },
 
@@ -92,6 +95,7 @@ SEGMENTS = {
             "promotor", "aparejador", "aparato burocrático",
         ],
         "active_deadline": None,
+        "competition_proxy": 7.5,               # Nada resuelve burocracia colegial bien
         "notes": "Burocracia colegial + municipal. Visados lentos.",
     },
 }
@@ -107,6 +111,7 @@ class SignalSource(str, Enum):
     G2_CAPTERRA     = "g2_capterra"
     FACEBOOK_GROUPS = "facebook_groups"
     GOOGLE_TRENDS   = "google_trends"
+    GOOGLE_NEWS     = "google_news"
     JOB_POSTINGS    = "job_postings"
     COLEGIOS_WEB    = "colegios_web"
     TWITTER_X       = "twitter_x"
@@ -210,6 +215,9 @@ class Opportunity:
     kill_threshold_days: int = 7        # días sin señal = kill automático
     scale_threshold_emails: int = 30    # emails en 7 días = escalar
 
+    # Alertas: evita spam en runs repetidos
+    telegram_alerted_at: Optional[datetime] = None
+
 
 # ─────────────────────────────────────────────
 # SCORING
@@ -294,11 +302,15 @@ CREATE TABLE IF NOT EXISTS opportunities (
     status              TEXT DEFAULT 'watching',
     landing_url         TEXT,
     emails_captured     INTEGER DEFAULT 0,
-    validation_deadline TEXT
+    validation_deadline TEXT,
+    telegram_alerted_at TEXT        -- ISO timestamp of last alert sent; NULL = never
 );
 
 CREATE INDEX IF NOT EXISTS idx_signals_segment   ON signals(segment);
 CREATE INDEX IF NOT EXISTS idx_signals_collected ON signals(collected_at);
 CREATE INDEX IF NOT EXISTS idx_opps_score        ON opportunities(score DESC);
 CREATE INDEX IF NOT EXISTS idx_opps_status       ON opportunities(status);
+
+-- Dedup a nivel de BD: misma URL + segmento no entra dos veces
+CREATE UNIQUE INDEX IF NOT EXISTS idx_signals_url_segment ON signals(url, segment);
 """

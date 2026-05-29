@@ -106,7 +106,7 @@ def collect_query(segment: str, query: str) -> int:
 
         full_text = f"{title}. {summary}"
         sig = build_signal(
-            source=SignalSource.GOOGLE_TRENDS,   # reutilizamos el enum más cercano
+            source=SignalSource.GOOGLE_NEWS,
             segment=segment,
             text=full_text,
             url=link or fake_url,
@@ -120,7 +120,7 @@ def collect_query(segment: str, query: str) -> int:
             if sent < -0.03 and len(full_text) > 40:
                 from schema import Signal
                 sig = Signal(
-                    source=SignalSource.GOOGLE_TRENDS,
+                    source=SignalSource.GOOGLE_NEWS,
                     segment=segment,
                     location="España",
                     raw_text=full_text,

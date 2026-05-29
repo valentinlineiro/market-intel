@@ -18,22 +18,23 @@ from schema import Signal, SignalSource, SEGMENTS
 # ── Sentiment simple sin dependencias pesadas ──────────────────────────────
 
 NEGATIVE_WORDS = {
-    "es", "en",  # stopwords — ignorar en otras listas
     # Frustración genérica
     "problema", "problemas", "horrible", "fatal", "pésimo", "pésima",
     "imposible", "desesperante", "agotador", "complicado", "complicada",
     "lento", "lenta", "tardísimo", "eterno", "eterna", "burocracia",
     "burocrático", "engorro", "engorroso", "confuso", "confusa",
-    # Tiempo perdido
-    "horas", "semanas", "meses", "espera", "esperando", "demora",
-    "retraso", "retrasos", "tardanza", "perdido", "perdida",
     # Dinero
     "caro", "cara", "carísimo", "multa", "multas", "sanción", "sanciones",
     "coste", "costes", "costazo", "ruinoso",
     # Emociones
     "frustrado", "frustrada", "harto", "harta", "agobiado", "agobiada",
-    "estresado", "estresada", "queja", "quejas", "odio", "odiar",
-    "no funciona", "no sirve", "un desastre", "caos",
+    "estresado", "estresada", "queja", "quejas", "odio", "odiar", "caos",
+}
+
+# Frases multi-palabra — se buscan por substring, no por token
+NEGATIVE_PHRASES = {
+    "no funciona", "no sirve", "un desastre", "no me llega",
+    "llevo esperando", "imposible contactar",
 }
 
 INTENSIFIERS = {"muy", "super", "demasiado", "increíblemente", "absurdamente"}
@@ -46,13 +47,14 @@ def sentiment_score(text: str) -> float:
     """
     text_lower = text.lower()
     words = re.findall(r'\b\w+\b', text_lower)
-    
+
     neg_count = sum(1 for w in words if w in NEGATIVE_WORDS)
+    # Frases multi-palabra: substring search directa
+    neg_count += sum(1 for p in NEGATIVE_PHRASES if p in text_lower)
     intensifier_count = sum(1 for w in words if w in INTENSIFIERS)
-    
-    # Penalizar más si hay intensificadores cerca de palabras negativas
+
     raw = -(neg_count + intensifier_count * 0.5) / max(len(words), 1)
-    return max(-1.0, raw * 10)  # escalar y clamp
+    return max(-1.0, raw * 10)
 
 
 def find_pain_keywords(text: str, segment: str) -> list[str]:
@@ -73,10 +75,10 @@ def signal_strength(pain_keywords: list[str], sentiment: float,
     len_score  = min(text_length / 500, 1.0)         # 500+ chars = máximo
     url_bonus  = 0.1 if has_url else 0.0
 
-    return round(
+    return min(1.0, round(
         kw_score * 0.45 + sent_score * 0.35 + len_score * 0.15 + url_bonus,
         3
-    )
+    ))
 
 
 def build_signal(

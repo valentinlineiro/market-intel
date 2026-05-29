@@ -32,7 +32,8 @@ from schema import (
     KILL_SCORE_THRESHOLD, SCALE_SCORE_THRESHOLD, ALERT_SCORE_THRESHOLD,
 )
 from db.database import (
-    init_db, get_signals, upsert_opportunity, get_opportunities, get_stats,
+    init_db, get_signals, get_signal_count, upsert_opportunity,
+    get_opportunities, get_stats,
 )
 
 log = logging.getLogger(__name__)
@@ -51,14 +52,8 @@ def _volume_score(segment_key: str) -> float:
     return round(min(pop / _MAX_POP_SPAIN, 1.0) * 10, 2)
 
 
-# Proxy de competencia: heurístico por segmento (ajustar con datos reales).
+# Proxy de competencia: definido en schema.SEGMENTS["segment"]["competition_proxy"]
 # 10 = sin solución dominante, 0 = mercado saturado.
-COMPETITION_PROXY = {
-    "dentista":             4.0,   # Clinic Cloud + Gesden tienen cuota alta
-    "docente_universitario":8.5,   # No hay solución clara para ANECA/Docentia
-    "abogado_autonomo":     6.0,   # LexNet problemático; mercado fragmentado
-    "arquitecto":           7.5,   # Nada que resuelva burocracia colegial bien
-}
 
 
 # ── Dolor: agrega señales del último periodo ──────────────────────────────
@@ -128,7 +123,7 @@ def score_segment(segment_key: str, signals: list[dict]) -> Opportunity:
         "dolor":          dolor,
         "capacidad_pago": float(income_tier_score(segment_key)),
         "volumen":        _volume_score(segment_key),
-        "competencia":    COMPETITION_PROXY.get(segment_key, 5.0),
+        "competencia":    float(SEGMENTS[segment_key].get("competition_proxy", 5.0)),
         "urgencia":       float(urgency_score(segment_key)),
     }
 
@@ -141,6 +136,17 @@ def score_segment(segment_key: str, signals: list[dict]) -> Opportunity:
         None,
     )
 
+    # signal_count: total real en DB, no limitado por el fetch de scorer
+    total_signal_count = get_signal_count(segment=segment_key)
+
+    # telegram_alerted_at: preservar del registro existente
+    existing_alerted_at = None
+    if existing and existing.get("telegram_alerted_at"):
+        try:
+            existing_alerted_at = datetime.fromisoformat(existing["telegram_alerted_at"])
+        except (ValueError, TypeError):
+            pass
+
     opp = Opportunity(
         id=existing["id"] if existing else Opportunity.__dataclass_fields__["id"].default_factory(),
         segment=segment_key,
@@ -148,12 +154,13 @@ def score_segment(segment_key: str, signals: list[dict]) -> Opportunity:
         score=score,
         score_breakdown=breakdown,
         signal_ids=signal_ids,
-        signal_count=len(signals),
+        signal_count=total_signal_count,
         first_seen=datetime.fromisoformat(existing["first_seen"]) if existing else datetime.utcnow(),
         last_updated=datetime.utcnow(),
         status=existing["status"] if existing else "watching",
         landing_url=(existing or {}).get("landing_url"),
         emails_captured=(existing or {}).get("emails_captured", 0) or 0,
+        telegram_alerted_at=existing_alerted_at,
     )
 
     return opp
@@ -183,12 +190,23 @@ def apply_kill_scale_rules(opp: Opportunity, window_days: int = 7) -> Opportunit
 
 # ── Alertas Telegram ───────────────────────────────────────────────────────
 
-def send_telegram_alert(opp: Opportunity):
+def send_telegram_alert(opp: Opportunity) -> bool:
+    """
+    Envía alerta Telegram. Retorna True si se envió.
+    Anti-spam: no reenvía si ya se alertó en las últimas 24h.
+    """
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
     if not token or not chat_id:
         log.debug("Telegram no configurado — skipping alert")
-        return
+        return False
+
+    # Anti-spam: no alertar más de una vez por día por oportunidad
+    if opp.telegram_alerted_at:
+        hours_since = (datetime.utcnow() - opp.telegram_alerted_at).total_seconds() / 3600
+        if hours_since < 24:
+            log.debug(f"  Telegram skip (alertado hace {hours_since:.1f}h): {opp.segment}")
+            return False
 
     seg = SEGMENTS.get(opp.segment, {})
     label = seg.get("label", opp.segment)
@@ -218,10 +236,13 @@ def send_telegram_alert(opp: Opportunity):
         )
         if resp.ok:
             log.info(f"  📲 Telegram alert enviado para {opp.segment}")
+            return True
         else:
             log.warning(f"  Telegram error: {resp.status_code} {resp.text[:100]}")
+            return False
     except Exception as e:
         log.error(f"  Telegram exception: {e}")
+        return False
 
 
 # ── Entry point ────────────────────────────────────────────────────────────
@@ -261,7 +282,10 @@ def run(segments: list[str] | None = None, dry_run: bool = False) -> list[dict]:
         if not dry_run:
             upsert_opportunity(opp)
             if opp.score >= ALERT_SCORE_THRESHOLD and opp.status == "watching":
-                send_telegram_alert(opp)
+                sent = send_telegram_alert(opp)
+                if sent:
+                    opp.telegram_alerted_at = datetime.utcnow()
+                    upsert_opportunity(opp)  # persiste el timestamp de alerta
 
         results.append({
             "segment": seg_key,
