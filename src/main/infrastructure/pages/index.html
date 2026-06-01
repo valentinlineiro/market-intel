@@ -28,13 +28,6 @@
 </head>
 <body>
 <div class="container">
-  <!-- Auth token (stored in memory only, never persisted) -->
-  <div id="auth-bar" style="margin-bottom:16px;display:flex;gap:8px;align-items:center;">
-    <input id="secret-input" type="password" placeholder="Worker secret (para deployar)"
-      style="flex:1;max-width:320px;padding:8px 12px;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#f1f5f9;font-size:0.8rem;">
-    <span id="auth-status" style="font-size:0.75rem;color:#475569;"></span>
-  </div>
-
   <!-- Copy editor modal -->
   <div id="modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:100;align-items:center;justify-content:center;">
     <div style="background:#0f172a;border:1px solid #1e293b;border-radius:16px;padding:32px;width:min(600px,90vw);max-height:90vh;overflow-y:auto;">
@@ -203,12 +196,6 @@
   let currentCopy    = null;
 
   async function openDeploy(segment) {
-    const secret = document.getElementById("secret-input").value.trim();
-    if (!secret) {
-      alert("Introduce el Worker secret primero.");
-      document.getElementById("secret-input").focus();
-      return;
-    }
     currentSegment = segment;
     currentCopy    = null;
     document.getElementById("modal-segment").textContent = segment;
@@ -219,9 +206,9 @@
     document.getElementById("modal-overlay").style.display = "flex";
 
     try {
-      const res = await fetch(`${WORKER}/synthesize`, {
+      const res = await fetch(`/api/synthesize`, {
         method: "POST",
-        headers: { "Authorization": `Bearer ${secret}`, "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ segment }),
       });
       if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
@@ -243,19 +230,13 @@
   }
 
   async function runDiscovery() {
-    const secret = document.getElementById("secret-input").value.trim();
-    if (!secret) {
-      alert("Introduce el Worker secret primero.");
-      document.getElementById("secret-input").focus();
-      return;
-    }
     const btn = document.getElementById("run-discovery-btn");
     btn.textContent = "Explorando...";
     btn.disabled = true;
     try {
-      const res = await fetch(`${WORKER}/discover`, {
+      const res = await fetch(`/api/discover`, {
         method: "POST",
-        headers: { "Authorization": `Bearer ${secret}`, "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({}),
       });
       if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
@@ -270,7 +251,6 @@
 
   document.getElementById("modal-deploy").addEventListener("click", async () => {
     if (!currentSegment || !currentCopy) return;
-    const secret = document.getElementById("secret-input").value.trim();
     const copy = {
       ...currentCopy,
       title:    document.getElementById("copy-title").value.trim(),
@@ -280,9 +260,9 @@
     document.getElementById("modal-status").textContent = "Deployando...";
     document.getElementById("modal-deploy").disabled = true;
     try {
-      const res = await fetch(`${WORKER}/deploy`, {
+      const res = await fetch(`/api/deploy`, {
         method: "POST",
-        headers: { "Authorization": `Bearer ${secret}`, "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ segment: currentSegment, copy }),
       });
       if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
