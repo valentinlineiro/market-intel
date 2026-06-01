@@ -24,8 +24,9 @@ export async function runDiscovery(apiKey, limit = 60) {
   if (!texts.length) return [];
 
   const allClusters = [];
-  for (let i = 0; i < texts.length && i < 30; i += 15) {
-    const batch = texts.slice(i, i + 15);
+  const toProcess = texts.slice(0, 30); // cost cap: max 2 LLM batches
+  for (let i = 0; i < toProcess.length; i += 15) {
+    const batch = toProcess.slice(i, i + 15);
     const clusters = await clusterBatch(batch, apiKey);
     allClusters.push(...clusters);
   }
@@ -79,11 +80,13 @@ async function clusterBatch(texts, apiKey) {
     if (!res.ok) return [];
 
     const data = await res.json();
-    let raw = data.choices[0].message.content.trim();
-    if (raw.startsWith("```")) {
-      raw = raw.split("```")[1];
-      if (raw.startsWith("json")) raw = raw.slice(4).trim();
+    const choices = data?.choices;
+    if (!choices?.length) {
+      console.error("cluster batch: empty choices", JSON.stringify(data).slice(0, 200));
+      return [];
     }
+    let raw = choices[0].message.content.trim();
+    raw = raw.replace(/^```[\w]*\n?/, "").replace(/\n?```$/, "").trim();
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [parsed];
   } catch (e) {
@@ -97,14 +100,15 @@ function aggregate(clusters) {
   for (const c of clusters) {
     if (!c.profile) continue;
     const keywords = c.keywords || [];
+    const kwLower = keywords.map(k => k.toLowerCase());
     const existing = merged.find(
-      m => keywords.filter(k => (m.keywords || []).includes(k)).length >= 2
+      m => kwLower.filter(k => (m.keywords || []).map(x => x.toLowerCase()).includes(k)).length >= 2
     );
     if (existing) {
-      existing.post_count = (existing.post_count || 0) + (c.post_count || 1);
-      existing.batch_count = (existing.batch_count || 1) + 1;
+      existing.post_count = (existing.post_count || 0) + Math.min(c.post_count || 1, 15);
+      existing.batch_count = existing.batch_count + 1;
     } else {
-      merged.push({ ...c, keywords, batch_count: 1 });
+      merged.push({ ...c, keywords, batch_count: 1, post_count: Math.min(c.post_count || 1, 15) });
     }
   }
   return merged
