@@ -58,7 +58,7 @@ jobs:
           echo "Changed files: $CHANGED"
           echo "$CHANGED" | grep -q '^src/main/infrastructure/worker/' && echo "worker=true" >> $GITHUB_OUTPUT || echo "worker=false" >> $GITHUB_OUTPUT
           echo "$CHANGED" | grep -q '^src/main/infrastructure/pages/'  && echo "pages=true"  >> $GITHUB_OUTPUT || echo "pages=false"  >> $GITHUB_OUTPUT
-          echo "$CHANGED" | grep -q '^schema\.sql'                     && echo "schema=true" >> $GITHUB_OUTPUT || echo "schema=false" >> $GITHUB_OUTPUT
+          echo "$CHANGED" | grep -qE '^src/main/infrastructure/worker/migrations/' && echo "schema=true" >> $GITHUB_OUTPUT || echo "schema=false" >> $GITHUB_OUTPUT
 
   migrate:
     needs: changes
@@ -68,12 +68,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Apply schema
+      - name: Apply migrations
         uses: cloudflare/wrangler-action@v3
         with:
-          apiToken:  ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command:   d1 execute market-intel --file=schema.sql --remote --yes
+          apiToken:         ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId:        ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: src/main/infrastructure/worker
+          command:          d1 migrations apply market-intel --remote
 
   deploy-worker:
     needs: [changes, migrate]
