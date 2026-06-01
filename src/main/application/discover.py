@@ -123,11 +123,11 @@ class DiscoverUseCase:
             posts="\n".join(f"{i+1}. {t}" for i, t in enumerate(texts)),
         )
         try:
-            raw = self._llm.complete(prompt, max_tokens=800).strip()
+            raw = self._llm.complete(prompt, max_tokens=800)
+            raw = raw.replace("```json", "").replace("```", "").strip()
             if not raw:
                 log.warning("Cluster batch: empty LLM response, skipping")
                 return []
-            raw = raw.replace("```json", "").replace("```", "").strip()
             data = json.loads(raw)
             return data if isinstance(data, list) else [data]
         except Exception as e:
