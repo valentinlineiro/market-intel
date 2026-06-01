@@ -1,4 +1,5 @@
 from __future__ import annotations
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -30,6 +31,33 @@ class Signal:
     income_tier: str = ""
     signal_strength: float = 0.0
     has_active_deadline: bool = False
+
+
+@dataclass
+class ActiveSegment:
+    """A market segment sourced from discovery or lead activity — no hardcoding."""
+    key: str                        # unique slug, e.g. "veterinario_autonomo"
+    label: str                      # human-readable, e.g. "Veterinario autónomo"
+    keywords: list[str] = field(default_factory=list)
+    income_tier: str = "medium"     # "high" | "medium_high" | "medium" | "low"
+    has_deadline: bool = False
+    discovery_score: float = 0.0
+    post_count: int = 0
+    has_leads: bool = False
+
+    @staticmethod
+    def from_candidate(c: dict) -> "ActiveSegment":
+        label = c.get("profile", "")
+        key = re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_")[:48]
+        return ActiveSegment(
+            key=key,
+            label=label,
+            keywords=c.get("keywords") or [],
+            income_tier=c.get("income_est") or "medium",
+            has_deadline=bool(c.get("has_deadline")),
+            discovery_score=float(c.get("discovery_score") or 0),
+            post_count=int(c.get("post_count") or 0),
+        )
 
 
 @dataclass

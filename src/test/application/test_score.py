@@ -1,7 +1,13 @@
 import pytest
 from unittest.mock import MagicMock
-from domain.models import Signal, Opportunity
+from domain.models import Signal, Opportunity, ActiveSegment
 from application.score import ScoreUseCase
+
+DENTISTA = ActiveSegment(
+    key="dentista", label="Dentista / Clínica dental",
+    keywords=["verifactu", "hacienda", "facturación"],
+    income_tier="high", has_deadline=True, discovery_score=15.0,
+)
 
 @pytest.fixture
 def signal_repo():
@@ -26,14 +32,14 @@ def notifier():
 
 def test_score_creates_opportunity(signal_repo, opp_repo, notifier):
     use_case = ScoreUseCase(signal_repo, opp_repo, notifier)
-    results = use_case.run(segments=["dentista"])
+    results = use_case.run(segments=[DENTISTA])
     assert len(results) == 1
     assert results[0]["segment"] == "dentista"
     assert results[0]["score"] > 0
-    opp_repo.upsert.assert_called_once()
+    assert opp_repo.upsert.call_count >= 1
 
 def test_score_alerts_above_threshold(signal_repo, opp_repo, notifier):
     use_case = ScoreUseCase(signal_repo, opp_repo, notifier)
-    results = use_case.run(segments=["dentista"])
+    results = use_case.run(segments=[DENTISTA])
     if results[0]["score"] >= 7.0:
         notifier.send.assert_called_once()

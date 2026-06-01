@@ -4,7 +4,6 @@ import logging
 from datetime import datetime
 
 from application.ports import OpportunityRepository, LLMProvider, PageDeployer
-from domain.segments import SEGMENTS
 from domain.rules import ALERT_SCORE_THRESHOLD
 
 log = logging.getLogger(__name__)
@@ -55,14 +54,13 @@ class ValidateUseCase:
 
     def _synthesize(self, segment: str) -> dict:
         from infrastructure.llm.prompts import SYNTHESIS_PROMPT, SECTOR_COPY
-        seg_data = SEGMENTS.get(segment, {})
         try:
             prompt = SYNTHESIS_PROMPT.format(
-                segment_label=seg_data.get("label", segment),
+                segment_label=segment,
                 signals_text="(sin señales recientes)",
-                top_keywords=", ".join(seg_data.get("pain_keywords", [])[:5]),
-                salary_mean=seg_data.get("salary_mean", "N/A"),
-                deadline_note=f"- Deadline activo: {seg_data['active_deadline']}" if seg_data.get("active_deadline") else "",
+                top_keywords=segment,
+                salary_mean="N/A",
+                deadline_note="",
             )
             raw = self._llm.complete(prompt).strip()
             if raw.startswith("```"):

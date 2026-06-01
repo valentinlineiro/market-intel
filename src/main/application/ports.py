@@ -39,5 +39,5 @@ class PageDeployer(ABC):
     def deploy(self, segment: str, copy: dict) -> str: ...  # returns published URL
 
 
-# Type alias for collector callables
-Collector = Callable[[str], list[Signal]]
+# Type alias for collector callables: (segment_key, keywords) -> signals
+Collector = Callable[[str, list[str]], list[Signal]]

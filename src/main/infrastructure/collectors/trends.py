@@ -6,40 +6,24 @@ from urllib.parse import quote_plus
 import requests
 
 from domain.models import Signal, SignalSource
-from domain.segments import SEGMENTS
 from infrastructure.collectors.base import build_signal
 
 log = logging.getLogger(__name__)
 
 BASE_URL = "https://news.google.com/rss/search"
 
-TREND_KEYWORDS: dict[str, list[str]] = {
-    "dentista": [
-        "verifactu dental",
-        "software gestión clínica dental",
-        "hacienda facturación dental",
-    ],
-    "docente_universitario": [
-        "aneca acreditación",
-        "acreditación universidad",
-        "sexenio investigación",
-    ],
-    "abogado_autonomo": [
-        "lexnet problemas",
-        "facturación electrónica abogados",
-        "software despacho abogados",
-    ],
-    "arquitecto": [
-        "visado colegial arquitecto",
-        "licencia obras ayuntamiento",
-        "software arquitectura gestión",
-    ],
-}
+
+def _build_queries(keywords: list[str]) -> list[str]:
+    if not keywords:
+        return []
+    return [
+        " ".join(keywords[:3]),
+        f"{keywords[0]} España problema",
+    ]
 
 
 def _fetch_rss(keyword: str) -> list[dict]:
-    params = f"?q={quote_plus(keyword)}&hl=es&gl=ES&ceid=ES:es"
-    url = BASE_URL + params
+    url = f"{BASE_URL}?q={quote_plus(keyword)}&hl=es&gl=ES&ceid=ES:es"
     try:
         r = requests.get(url, timeout=15, headers={"User-Agent": "market-intel/0.1"})
         r.raise_for_status()
@@ -57,17 +41,13 @@ def _fetch_rss(keyword: str) -> list[dict]:
         return []
 
 
-def collect(segment: str) -> list[Signal]:
+def collect(segment: str, keywords: list[str]) -> list[Signal]:
     signals: list[Signal] = []
-    for keyword in TREND_KEYWORDS.get(segment, []):
-        for item in _fetch_rss(keyword):
-            sig = build_signal(
-                source=SignalSource.GOOGLE_NEWS,
-                segment=segment,
-                text=item["text"],
-                url=item["url"],
-                location="España",
-            )
+    for query in _build_queries(keywords):
+        for item in _fetch_rss(query):
+            sig = build_signal(source=SignalSource.GOOGLE_NEWS, segment=segment,
+                               text=item["text"], url=item["url"],
+                               location="España", keywords=keywords)
             if sig and sig.signal_strength > 0.05:
                 signals.append(sig)
         time.sleep(1)

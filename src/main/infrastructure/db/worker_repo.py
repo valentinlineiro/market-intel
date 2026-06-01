@@ -8,7 +8,6 @@ import requests
 
 from application.ports import SignalRepository, OpportunityRepository
 from domain.models import Signal, Opportunity, SignalSource
-from domain.segments import SEGMENTS
 
 log = logging.getLogger(__name__)
 _SESSION = requests.Session()
@@ -27,7 +26,6 @@ def _headers() -> dict:
 
 class WorkerSignalRepo(SignalRepository):
     def save(self, s: Signal) -> bool:
-        seg_data = SEGMENTS.get(s.segment, {})
         r = _SESSION.post(_url("/signals"), headers=_headers(), json={
             "id": s.id, "source": s.source.value,
             "collected_at": s.collected_at.isoformat(),
@@ -35,10 +33,10 @@ class WorkerSignalRepo(SignalRepository):
             "raw_text": s.raw_text[:2000], "url": s.url,
             "pain_keywords": s.pain_keywords_found,
             "sentiment_score": s.sentiment_score,
-            "salary_mean": seg_data.get("salary_mean", 0),
-            "income_tier": seg_data.get("income_tier", ""),
+            "salary_mean": s.salary_mean or 0,
+            "income_tier": s.income_tier or "",
             "signal_strength": s.signal_strength,
-            "has_deadline": bool(seg_data.get("active_deadline")),
+            "has_deadline": s.has_active_deadline,
         }, timeout=15)
         r.raise_for_status()
         return r.json().get("inserted", False)

@@ -4,8 +4,7 @@ from datetime import datetime, timedelta
 from collections import Counter
 
 from application.ports import SignalRepository, OpportunityRepository, Notifier
-from domain.models import Opportunity, Signal
-from domain.segments import SEGMENTS
+from domain.models import Opportunity, Signal, ActiveSegment
 from domain.rules import (
     compute_opportunity_score, income_tier_score, urgency_score, volume_score,
     KILL_SCORE_THRESHOLD, SCALE_SCORE_THRESHOLD, ALERT_SCORE_THRESHOLD,
@@ -21,26 +20,25 @@ class ScoreUseCase:
         self._opps = opp_repo
         self._notifier = notifier
 
-    def run(self, segments: list[str] | None = None, dry_run: bool = False) -> list[dict]:
-        target = segments or list(SEGMENTS.keys())
+    def run(self, segments: list[ActiveSegment], dry_run: bool = False) -> list[dict]:
         results = []
 
-        for seg_key in target:
-            signals = self._signals.get(segment=seg_key, limit=500)
-            opp = self._score_segment(seg_key, signals)
+        for seg in segments:
+            signals = self._signals.get(segment=seg.key, limit=500)
+            opp = self._score_segment(seg, signals)
             opp = self._apply_rules(opp)
 
             if not dry_run:
                 self._opps.upsert(opp)
                 if opp.score >= ALERT_SCORE_THRESHOLD and opp.status == "watching":
                     if self._should_alert(opp):
-                        msg = self._format_alert(opp)
+                        msg = self._format_alert(opp, seg)
                         if self._notifier.send(msg):
                             opp.telegram_alerted_at = datetime.utcnow()
                             self._opps.upsert(opp)
 
             results.append({
-                "segment": seg_key,
+                "segment": seg.key,
                 "score": opp.score,
                 "status": opp.status,
                 "signal_count": opp.signal_count,
@@ -51,25 +49,25 @@ class ScoreUseCase:
         results.sort(key=lambda r: r["score"], reverse=True)
         return results
 
-    def _score_segment(self, seg_key: str, signals: list[Signal]) -> Opportunity:
+    def _score_segment(self, seg: ActiveSegment, signals: list[Signal]) -> Opportunity:
         dolor, pain_summary = self._dolor_score(signals)
         breakdown = {
             "dolor":          dolor,
-            "capacidad_pago": float(income_tier_score(seg_key)),
-            "volumen":        volume_score(seg_key),
-            "competencia":    float(SEGMENTS[seg_key].get("competition_proxy", 5.0)),
-            "urgencia":       float(urgency_score(seg_key)),
+            "capacidad_pago": float(income_tier_score(seg.income_tier)),
+            "volumen":        volume_score(seg.discovery_score),
+            "competencia":    5.0,
+            "urgencia":       float(urgency_score(seg.has_deadline)),
         }
-        existing = self._opps.get_by_segment(seg_key)
-        opp_id = existing.id if existing else Opportunity(segment=seg_key).id
+        existing = self._opps.get_by_segment(seg.key)
+        opp_id = existing.id if existing else Opportunity(segment=seg.key).id
         return Opportunity(
             id=opp_id,
-            segment=seg_key,
+            segment=seg.key,
             pain_summary=pain_summary or (existing.pain_summary if existing else ""),
             score=compute_opportunity_score(breakdown),
             score_breakdown=breakdown,
             signal_ids=[s.id for s in signals[-50:]],
-            signal_count=self._signals.count(segment=seg_key),
+            signal_count=self._signals.count(segment=seg.key),
             first_seen=existing.first_seen if existing else datetime.utcnow(),
             last_updated=datetime.utcnow(),
             status=existing.status if existing else "watching",
@@ -114,17 +112,16 @@ class ScoreUseCase:
             return True
         return (datetime.utcnow() - opp.telegram_alerted_at).total_seconds() > 86400
 
-    def _format_alert(self, opp: Opportunity) -> str:
-        seg = SEGMENTS.get(opp.segment, {})
+    def _format_alert(self, opp: Opportunity, seg: ActiveSegment) -> str:
         bd = opp.score_breakdown
         lines = [
             f"🎯 *Oportunidad detectada*",
-            f"*Segmento:* {seg.get('label', opp.segment)}",
+            f"*Segmento:* {seg.label}",
             f"*Score:* {opp.score}/10",
             f"*Dolor:* {bd.get('dolor', 0):.1f} | *Pago:* {bd.get('capacidad_pago', 0):.0f} | *Urgencia:* {bd.get('urgencia', 0):.0f}",
             f"*Señales:* {opp.signal_count}",
             f"*Resumen:* {opp.pain_summary}",
         ]
-        if seg.get("active_deadline"):
-            lines.append(f"⚠️ Deadline: {seg['active_deadline']}")
+        if seg.has_deadline:
+            lines.append("⚠️ Deadline activo")
         return "\n".join(lines)

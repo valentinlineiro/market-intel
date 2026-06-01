@@ -9,6 +9,7 @@ from application.ports import (
     SignalRepository, OpportunityRepository,
     LLMProvider, Notifier, PageDeployer, Collector,
 )
+from domain.models import ActiveSegment
 
 log = logging.getLogger(__name__)
 
@@ -21,20 +22,22 @@ class Pipeline:
         self._score = ScoreUseCase(signal_repo, opp_repo, notifier)
         self._validate = ValidateUseCase(opp_repo, llm, deployer)
 
-    def run(self, segments: list[str] | None = None, skip_collect: bool = False,
+    def run(self, active_segments: list[ActiveSegment], skip_collect: bool = False,
             dry_run: bool = False, force: bool = False,
             threshold: float = 7.0) -> dict:
         log.info(f"\n{'='*55}\nPIPELINE START — {datetime.utcnow().isoformat()}\n{'='*55}")
+        log.info(f"Active segments: {[s.key for s in active_segments]}")
 
         if not skip_collect:
-            collected = self._collect.run(segments=segments)
+            collected = self._collect.run(active_segments)
             log.info(f"Collected: {collected}")
 
-        scored = self._score.run(segments=segments, dry_run=dry_run)
+        scored = self._score.run(active_segments, dry_run=dry_run)
         log.info(f"Scored: {[(r['segment'], r['score']) for r in scored]}")
 
+        seg_keys = [s.key for s in active_segments]
         deployed = self._validate.run(
-            segments=segments, dry_run=dry_run, force=force, threshold=threshold
+            segments=seg_keys, dry_run=dry_run, force=force, threshold=threshold
         )
         log.info(f"Deployed: {deployed}")
 

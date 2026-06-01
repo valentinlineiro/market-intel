@@ -105,9 +105,10 @@ def _parse_capterra(html: str, product_name: str) -> list[dict]:
     return reviews
 
 
-def collect(segment: str) -> list[Signal]:
+def collect(segment: str, keywords: list[str] = None) -> list[Signal]:
     """Returns list of Signal objects — caller persists them."""
     signals: list[Signal] = []
+    kw = keywords or []
 
     for (platform, url, product_name) in SOFTWARE_MAP.get(segment, []):
         html = _fetch_html(url)
@@ -122,6 +123,7 @@ def collect(segment: str) -> list[Signal]:
                 segment=segment,
                 text=review["text"],
                 url=review["url"],
+                keywords=kw,
             )
             if not sig:
                 sent = sentiment_score(review["text"])

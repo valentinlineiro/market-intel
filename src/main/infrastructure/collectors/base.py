@@ -2,7 +2,6 @@ import re
 from datetime import datetime
 
 from domain.models import Signal, SignalSource
-from domain.segments import SEGMENTS
 
 
 NEGATIVE_WORDS = {
@@ -34,8 +33,7 @@ def sentiment_score(text: str) -> float:
     return max(-1.0, raw * 10)
 
 
-def find_pain_keywords(text: str, segment: str) -> list[str]:
-    keywords = SEGMENTS.get(segment, {}).get("pain_keywords", [])
+def find_pain_keywords(text: str, keywords: list[str]) -> list[str]:
     text_lower = text.lower()
     return [kw for kw in keywords if kw.lower() in text_lower]
 
@@ -55,13 +53,14 @@ def build_signal(
     text: str,
     url: str = "",
     location: str = "España",
+    keywords: list[str] | None = None,
 ) -> Signal | None:
-    keywords = find_pain_keywords(text, segment)
-    if not keywords:
+    found = find_pain_keywords(text, keywords or [])
+    if not found:
         return None
 
     score_sent = sentiment_score(text)
-    score_str  = signal_strength(keywords, score_sent, bool(url), len(text))
+    score_str  = signal_strength(found, score_sent, bool(url), len(text))
 
     return Signal(
         source=source,
@@ -70,7 +69,7 @@ def build_signal(
         location=location,
         raw_text=text,
         url=url,
-        pain_keywords_found=keywords,
+        pain_keywords_found=found,
         sentiment_score=score_sent,
         signal_strength=score_str,
     )

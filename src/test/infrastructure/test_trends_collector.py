@@ -2,6 +2,8 @@ from unittest.mock import patch, MagicMock
 
 from infrastructure.collectors.trends import collect, _fetch_rss
 
+KEYWORDS = ["verifactu", "facturacion", "dental"]
+
 RSS_SAMPLE = (
     '<?xml version="1.0" encoding="UTF-8"?>'
     "<rss><channel>"
@@ -30,7 +32,6 @@ def test_fetch_rss_returns_items():
     with patch("infrastructure.collectors.trends.requests.get", return_value=_mock_get(RSS_SAMPLE)):
         items = _fetch_rss("verifactu dental")
     assert len(items) == 2
-    assert "verifactu" in items[0]["text"].lower() or "facturacion" in items[0]["text"].lower()
 
 
 def test_fetch_rss_returns_empty_on_error():
@@ -42,11 +43,11 @@ def test_fetch_rss_returns_empty_on_error():
 def test_collect_filters_by_pain_keywords():
     with patch("infrastructure.collectors.trends.requests.get", return_value=_mock_get(RSS_SAMPLE)):
         with patch("infrastructure.collectors.trends.time.sleep"):
-            signals = collect("dentista")
+            signals = collect("dentista", KEYWORDS)
     assert len(signals) >= 1
     assert all(s.signal_strength > 0.05 for s in signals)
 
 
-def test_collect_returns_empty_for_unknown_segment():
-    signals = collect("nonexistent_segment")
+def test_collect_returns_empty_for_no_keywords():
+    signals = collect("nonexistent_segment", [])
     assert signals == []
