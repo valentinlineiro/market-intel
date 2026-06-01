@@ -13,7 +13,7 @@ except ImportError:
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 
 from infrastructure.compose import build
-from infrastructure.collectors.reddit import collect as reddit_collect
+from infrastructure.collectors.hn import collect as hn_collect
 from infrastructure.collectors.trends import collect as trends_collect
 from infrastructure.collectors.g2 import collect as g2_collect
 from application.pipeline import Pipeline
@@ -32,7 +32,7 @@ def main():
     deps = build(dry_run=args.dry_run)
     pipeline = Pipeline(
         **deps,
-        collectors=[reddit_collect, trends_collect, g2_collect],
+        collectors=[hn_collect, trends_collect, g2_collect],
     )
     pipeline.run(
         segments=args.segment,
