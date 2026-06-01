@@ -1,4 +1,5 @@
 import os
+import time
 import logging
 import requests
 from application.ports import LLMProvider
@@ -17,6 +18,8 @@ _PROVIDERS = [
      "model": "claude-sonnet-4-20250514", "type": "anthropic"},
 ]
 
+_RETRY_DELAYS = [10, 30]  # seconds to wait on 429 before giving up on that provider
+
 
 class LLMChain(LLMProvider):
     def complete(self, prompt: str, max_tokens: int = 1024) -> str:
@@ -25,13 +28,25 @@ class LLMChain(LLMProvider):
             api_key = os.getenv(p["env_key"])
             if not api_key:
                 continue
-            try:
-                if p["type"] == "anthropic":
-                    return _call_anthropic(api_key, p["model"], prompt, max_tokens)
-                return _call_openai(api_key, p, prompt, max_tokens)
-            except Exception as e:
-                log.warning(f"  {p['name']} failed: {e}")
-                errors.append(f"{p['name']}: {e}")
+            for attempt, delay in enumerate([0] + _RETRY_DELAYS):
+                if delay:
+                    log.warning(f"  {p['name']} rate limited, retrying in {delay}s...")
+                    time.sleep(delay)
+                try:
+                    if p["type"] == "anthropic":
+                        return _call_anthropic(api_key, p["model"], prompt, max_tokens)
+                    return _call_openai(api_key, p, prompt, max_tokens)
+                except requests.HTTPError as e:
+                    if e.response is not None and e.response.status_code == 429:
+                        if attempt < len(_RETRY_DELAYS):
+                            continue  # retry this provider
+                    log.warning(f"  {p['name']} failed: {e}")
+                    errors.append(f"{p['name']}: {e}")
+                    break
+                except Exception as e:
+                    log.warning(f"  {p['name']} failed: {e}")
+                    errors.append(f"{p['name']}: {e}")
+                    break
         raise RuntimeError(f"No LLM provider available. Errors: {'; '.join(errors)}")
 
 

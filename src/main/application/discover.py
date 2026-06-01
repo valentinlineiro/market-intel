@@ -60,7 +60,7 @@ class DiscoverUseCase:
         for i in range(0, len(texts), 15):
             batch = texts[i:i + 15]
             all_clusters.extend(self._cluster_batch(batch))
-            time.sleep(2)
+            time.sleep(15)  # Groq free tier: ~4 RPM sustained
 
         candidates = self._aggregate(all_clusters)
         top = [c for c in candidates if c["discovery_score"] >= min_score]
@@ -124,10 +124,10 @@ class DiscoverUseCase:
         )
         try:
             raw = self._llm.complete(prompt, max_tokens=800).strip()
-            if raw.startswith("```"):
-                raw = raw.split("```")[1]
-                if raw.startswith("json"):
-                    raw = raw[4:].strip()
+            if not raw:
+                log.warning("Cluster batch: empty LLM response, skipping")
+                return []
+            raw = raw.replace("```json", "").replace("```", "").strip()
             data = json.loads(raw)
             return data if isinstance(data, list) else [data]
         except Exception as e:
