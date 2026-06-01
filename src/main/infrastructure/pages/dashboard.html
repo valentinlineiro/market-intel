@@ -48,6 +48,14 @@
       <tbody id="opps-body"><tr><td colspan="6" class="loading">Cargando...</td></tr></tbody>
     </table>
   </div>
+
+  <h2 style="margin-top:32px;">Leads</h2>
+  <div class="card" style="overflow-x:auto;">
+    <table id="leads-table">
+      <thead><tr><th>Segmento</th><th>Email</th><th>Fecha</th></tr></thead>
+      <tbody id="leads-body"><tr><td colspan="3" class="loading">Cargando...</td></tr></tbody>
+    </table>
+  </div>
 </div>
 
 <script>
@@ -55,12 +63,14 @@
 
   async function load() {
     try {
-      const [statsRes, oppsRes] = await Promise.all([
+      const [statsRes, oppsRes, leadsRes] = await Promise.all([
         fetch(`${WORKER}/public/stats`),
         fetch(`${WORKER}/public/opportunities`),
+        fetch(`${WORKER}/public/leads`),
       ]);
       const stats = await statsRes.json();
       const opps  = await oppsRes.json();
+      const leads = await leadsRes.json();
 
       document.getElementById("updated").textContent =
         "Actualizado: " + new Date().toISOString().slice(0,16).replace("T"," ") + " UTC";
@@ -89,6 +99,20 @@
         </tr>`;
       }).join("");
       document.getElementById("opps-body").innerHTML = rows || '<tr><td colspan="6" style="color:#475569;">Sin oportunidades todavía.</td></tr>';
+
+      const allLeads = Object.entries(leads.by_segment || {}).flatMap(
+        ([seg, entries]) => entries.map(e => ({ seg, ...e }))
+      ).sort((a, b) => b.captured_at.localeCompare(a.captured_at));
+
+      const leadRows = allLeads.map(l =>
+        `<tr>
+          <td>${l.seg}</td>
+          <td style="font-family:monospace;font-size:0.8rem;">${l.email}</td>
+          <td style="color:#64748b;font-size:0.8rem;">${l.captured_at.slice(0,16).replace("T"," ")}</td>
+        </tr>`
+      ).join("");
+      document.getElementById("leads-body").innerHTML =
+        leadRows || '<tr><td colspan="3" style="color:#475569;">Sin leads todavía.</td></tr>';
 
     } catch (e) {
       document.getElementById("stats-grid").innerHTML = `<div class="card"><p class="error">Error: ${e.message}</p></div>`;
