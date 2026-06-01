@@ -68,6 +68,21 @@
     <div class="card"><p class="loading">Cargando...</p></div>
   </div>
 
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+    <h2 style="margin:0;">Sectores Emergentes</h2>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <span id="discovery-ts" style="font-size:0.7rem;color:#334155;"></span>
+      <button id="run-discovery-btn"
+        onclick="runDiscovery()"
+        style="padding:6px 14px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:6px;font-size:0.75rem;cursor:pointer;">
+        Descubrir ahora
+      </button>
+    </div>
+  </div>
+  <div id="sectors-grid" class="grid" style="margin-bottom:32px;">
+    <div class="card"><p class="loading">Cargando...</p></div>
+  </div>
+
   <h2>Oportunidades</h2>
   <div class="card" style="overflow-x:auto;">
     <table id="opps-table">
@@ -90,17 +105,25 @@
 
   async function load() {
     try {
-      const [statsRes, oppsRes, leadsRes] = await Promise.all([
+      const [statsRes, oppsRes, leadsRes, discoveryRes] = await Promise.all([
         fetch(`${WORKER}/public/stats`),
         fetch(`${WORKER}/public/opportunities`),
         fetch(`${WORKER}/public/leads`),
+        fetch(`${WORKER}/public/discovery`),
       ]);
-      const stats = await statsRes.json();
-      const opps  = await oppsRes.json();
-      const leads = await leadsRes.json();
+      const stats     = await statsRes.json();
+      const opps      = await oppsRes.json();
+      const leads     = await leadsRes.json();
+      const discovery = await discoveryRes.json();
 
       document.getElementById("updated").textContent =
         "Actualizado: " + new Date().toISOString().slice(0,16).replace("T"," ") + " UTC";
+
+      if (discovery.discovered_at) {
+        const ago = Math.round((Date.now() - new Date(discovery.discovered_at)) / 60000);
+        document.getElementById("discovery-ts").textContent =
+          `Última exploración: hace ${ago < 60 ? ago + " min" : Math.round(ago / 60) + " h"}`;
+      }
 
       const bySegHtml = Object.entries(stats.by_segment || {})
         .map(([seg, n]) => `<div class="stat"><span class="stat-value">${n}</span><span class="stat-label">${seg}</span></div>`)
@@ -110,6 +133,26 @@
         <div class="card"><div class="stat"><span class="stat-value">${stats.total_opportunities ?? 0}</span><span class="stat-label">Oportunidades</span></div></div>
         <div class="card">${bySegHtml}</div>
       `;
+
+      const sectorCards = (discovery.candidates || []).slice(0, 6).map(c => {
+        const scorePct   = Math.min(c.discovery_score / 20, 1);
+        const scoreColor = scorePct > 0.6 ? "#34d399" : scorePct > 0.3 ? "#fbbf24" : "#94a3b8";
+        const kwChips = (c.keywords || []).slice(0, 4).map(
+          k => `<span style="padding:2px 6px;background:#1e293b;border-radius:4px;font-size:0.7rem;color:#64748b;">${k}</span>`
+        ).join(" ");
+        return `<div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
+            <strong style="color:#f1f5f9;font-size:0.9rem;line-height:1.3;">${c.profile}</strong>
+            <span style="color:${scoreColor};font-weight:700;font-size:0.85rem;white-space:nowrap;margin-left:8px;">${c.discovery_score.toFixed(1)}</span>
+          </div>
+          <p style="color:#64748b;font-size:0.8rem;margin-bottom:10px;line-height:1.4;">${c.pain}</p>
+          <div style="display:flex;flex-wrap:wrap;gap:4px;">${kwChips}</div>
+          <div style="margin-top:8px;font-size:0.7rem;color:#334155;">${c.post_count} posts · ${c.income_est || "—"}</div>
+        </div>`;
+      }).join("");
+
+      document.getElementById("sectors-grid").innerHTML =
+        sectorCards || '<div class="card"><p style="color:#475569;font-size:0.875rem;">Sin sectores detectados todavía. Haz clic en "Descubrir ahora".</p></div>';
 
       const rows = (opps.results || []).map(o => {
         const badge = `<span class="badge badge-${o.status}">${o.status}</span>`;
@@ -194,6 +237,32 @@
     document.getElementById("modal-overlay").style.display = "none";
     currentSegment = null;
     currentCopy    = null;
+  }
+
+  async function runDiscovery() {
+    const secret = document.getElementById("secret-input").value.trim();
+    if (!secret) {
+      alert("Introduce el Worker secret primero.");
+      document.getElementById("secret-input").focus();
+      return;
+    }
+    const btn = document.getElementById("run-discovery-btn");
+    btn.textContent = "Explorando...";
+    btn.disabled = true;
+    try {
+      const res = await fetch(`${WORKER}/discover`, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${secret}`, "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+      const data = await res.json();
+      btn.textContent = `✓ ${data.candidates?.length ?? 0} sectores encontrados`;
+      setTimeout(() => { btn.textContent = "Descubrir ahora"; btn.disabled = false; load(); }, 2000);
+    } catch (e) {
+      btn.textContent = `Error: ${e.message}`;
+      setTimeout(() => { btn.textContent = "Descubrir ahora"; btn.disabled = false; }, 3000);
+    }
   }
 
   document.getElementById("modal-deploy").addEventListener("click", async () => {
