@@ -28,7 +28,7 @@ CREATE INDEX IF NOT EXISTS idx_sig_seg ON signals(segment);
 CREATE INDEX IF NOT EXISTS idx_opp_seg ON opportunities(segment);
 """
 
-_DEFAULT_DB = Path(__file__).parent.parent.parent / "market_intel.db"
+_DEFAULT_DB = Path(__file__).parent.parent.parent.parent.parent / "market_intel.db"
 
 
 def _conn(db_path: str) -> sqlite3.Connection:

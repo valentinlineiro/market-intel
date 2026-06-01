@@ -35,6 +35,7 @@ for seg in SEGMENTS:
         repo.save(s)
 "
         env:
-          WORKER_URL:    ${{ secrets.WORKER_URL }}
-          WORKER_SECRET: ${{ secrets.WORKER_SECRET }}
+          WORKER_URL:       ${{ secrets.WORKER_URL }}
+          WORKER_SECRET:    ${{ secrets.WORKER_SECRET }}
+          PYTHONPATH:       src/main
           PYTHONUNBUFFERED: "1"
