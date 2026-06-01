@@ -25,7 +25,9 @@ const SEGMENTS = {
   arquitecto:            { label: "Arquitecto",                  keywords: ["visado", "presupuestos", "certificados"],   salary_mean: 44000 },
 };
 
-export async function synthesizeCopy(segment, apiKey) {
+import { callLLM } from "./llm.js";
+
+export async function synthesizeCopy(segment, env) {
   const seg = SEGMENTS[segment] || { label: segment, keywords: [], salary_mean: "N/A" };
   const prompt = SYNTHESIS_PROMPT
     .replace("{segment_label}", seg.label)
@@ -33,23 +35,7 @@ export async function synthesizeCopy(segment, apiKey) {
     .replace("{salary_mean}", String(seg.salary_mean))
     .replace("{deadline_note}", "");
 
-  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "anthropic/claude-haiku-4-5",
-      messages: [{ role: "user", content: prompt }],
-      max_tokens: 800,
-    }),
-  });
-
-  if (!res.ok) throw new Error(`LLM error ${res.status}: ${await res.text()}`);
-
-  const data = await res.json();
-  let raw = data.choices[0].message.content.trim();
+  let raw = await callLLM(prompt, env, { maxTokens: 800 });
   if (raw.startsWith("```")) {
     raw = raw.split("```")[1];
     if (raw.startsWith("json")) raw = raw.slice(4).trim();

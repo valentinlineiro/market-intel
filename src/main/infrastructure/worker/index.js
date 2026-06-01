@@ -84,7 +84,7 @@ export default {
       if (path === "/synthesize" && method === "POST") {
         const { segment } = await request.json();
         if (!segment) return json({ error: "segment required" }, 400);
-        const copy = await synthesizeCopy(segment, env.OPENROUTER_API_KEY);
+        const copy = await synthesizeCopy(segment, env);
         return json({ segment, copy });
       }
 
@@ -133,9 +133,9 @@ export default {
       }
 
       if (path === "/discover" && method === "POST") {
-        if (!env.OPENROUTER_API_KEY)
-          return json({ error: "OPENROUTER_API_KEY not configured" }, 503);
-        const candidates = await runDiscovery(env.OPENROUTER_API_KEY);
+        if (!env.GROQ_API_KEY && !env.OPENROUTER_API_KEY)
+          return json({ error: "No LLM key configured (GROQ_API_KEY or OPENROUTER_API_KEY required)" }, 503);
+        const candidates = await runDiscovery(env);
         if (!candidates.length) return json({ run_id: null, candidates: [] });
         const run_id = new Date().toISOString();
         const now    = run_id;

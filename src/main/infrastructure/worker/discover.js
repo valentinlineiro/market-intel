@@ -31,7 +31,9 @@ Para cada perfil nuevo devuelve JSON:
 
 Devuelve SOLO un array JSON válido. Si no hay perfiles nuevos devuelve [].`;
 
-export async function runDiscovery(apiKey, limit = 60) {
+import { callLLM } from "./llm.js";
+
+export async function runDiscovery(env, limit = 60) {
   const texts = await collectBroad(limit);
   if (!texts.length) return [];
 
@@ -39,7 +41,7 @@ export async function runDiscovery(apiKey, limit = 60) {
   const toProcess = texts.slice(0, 30); // cost cap: max 2 LLM batches
   for (let i = 0; i < toProcess.length; i += 15) {
     const batch = toProcess.slice(i, i + 15);
-    const clusters = await clusterBatch(batch, apiKey);
+    const clusters = await clusterBatch(batch, env);
     allClusters.push(...clusters);
   }
 
@@ -86,30 +88,13 @@ async function collectBroad(limit) {
   return texts.slice(0, limit);
 }
 
-async function clusterBatch(texts, apiKey) {
+async function clusterBatch(texts, env) {
   const prompt = CLUSTER_PROMPT
     .replace("{known}", KNOWN_SEGMENTS.join(", "))
     .replace("{posts}", texts.map((t, i) => `${i + 1}. ${t}`).join("\n"));
 
   try {
-    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "anthropic/claude-haiku-4-5",
-        messages: [{ role: "user", content: prompt }],
-        max_tokens: 600,
-      }),
-    });
-    if (!res.ok) return [];
-
-    const data = await res.json();
-    const choices = data?.choices;
-    if (!choices?.length) {
-      console.error("cluster batch: empty choices", JSON.stringify(data).slice(0, 200));
-      return [];
-    }
-    let raw = choices[0].message.content.trim();
+    let raw = await callLLM(prompt, env, { maxTokens: 600 });
     raw = raw.replace(/^```[\w]*\n?/, "").replace(/\n?```$/, "").trim();
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [parsed];
