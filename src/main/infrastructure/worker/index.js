@@ -15,9 +15,15 @@
  * Rutas públicas (sin auth — para dashboard):
  *   GET    /public/stats
  *   GET    /public/opportunities
+ *   GET    /public/leads
+ *
+ * Rutas autenticadas (nuevas):
+ *   POST   /synthesize   — genera copy vía LLM (sin deployar)
+ *   POST   /deploy       — guarda HTML en D1 y actualiza opportunity
  */
 
 import { runGnewsCron } from "./collectors/gnews.js";
+import { synthesizeCopy, buildHtml } from "./synthesize.js";
 
 const CORS = {
   "Access-Control-Allow-Origin":  "*",
@@ -35,9 +41,10 @@ export default {
     const method = request.method;
 
     // ── Public read-only routes (no auth required for dashboard) ──────────
-    if (method === "GET" && (path === "/public/stats" || path === "/public/opportunities")) {
+    if (method === "GET" && (path === "/public/stats" || path === "/public/opportunities" || path === "/public/leads")) {
       try {
-        if (path === "/public/stats") return await getStats(env.DB);
+        if (path === "/public/stats")         return await getStats(env.DB);
+        if (path === "/public/leads")         return await getLeads(env.DB, url.searchParams);
         return await getOpportunities(env.DB, url.searchParams);
       } catch (err) {
         return json({ error: err.message }, 500);
@@ -70,6 +77,32 @@ export default {
 
       if (path === "/stats" && method === "GET")
         return await getStats(env.DB);
+
+      if (path === "/synthesize" && method === "POST") {
+        const { segment } = await request.json();
+        if (!segment) return json({ error: "segment required" }, 400);
+        const copy = await synthesizeCopy(segment, env.OPENROUTER_API_KEY);
+        return json({ segment, copy });
+      }
+
+      if (path === "/deploy" && method === "POST") {
+        const { segment, copy } = await request.json();
+        if (!segment || !copy) return json({ error: "segment and copy required" }, 400);
+        const html = buildHtml(segment, copy);
+        const now  = new Date().toISOString();
+        await env.DB.prepare(
+          `INSERT INTO landing_pages (segment, html, title, deployed_at)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT(segment) DO UPDATE SET
+             html=excluded.html, title=excluded.title, deployed_at=excluded.deployed_at`
+        ).bind(segment, html, copy.title, now).run();
+        const landingUrl = `https://market-intel.pages.dev/landings/${segment}`;
+        await env.DB.prepare(
+          `UPDATE opportunities SET landing_url = ?, status = 'testing', last_updated = ?
+           WHERE segment = ?`
+        ).bind(landingUrl, now, segment).run();
+        return json({ url: landingUrl });
+      }
 
       return json({ error: "not found" }, 404);
 
@@ -175,6 +208,19 @@ async function getStats(db) {
     top_opportunity: topRow ?? null,
     backend: "worker+d1",
   });
+}
+
+async function getLeads(db, params) {
+  const segment = params.get("segment");
+  const { results } = segment
+    ? await db.prepare("SELECT email, segment, captured_at FROM leads WHERE segment = ? ORDER BY captured_at DESC").bind(segment).all()
+    : await db.prepare("SELECT email, segment, captured_at FROM leads ORDER BY captured_at DESC LIMIT 200").all();
+  const bySegment = {};
+  for (const r of results ?? []) {
+    if (!bySegment[r.segment]) bySegment[r.segment] = [];
+    bySegment[r.segment].push({ email: r.email, captured_at: r.captured_at });
+  }
+  return json({ total: (results ?? []).length, by_segment: bySegment });
 }
 
 function json(body, status = 200) {
