@@ -1,0 +1,13 @@
+name = "market-intel-api"
+main = "index.js"
+compatibility_date = "2025-01-01"
+
+[[d1_databases]]
+binding       = "DB"
+database_name = "market-intel"
+database_id   = "101dd684-e2df-4edf-97ea-f92be920d1e1"
+
+[triggers]
+crons = ["0 */12 * * *"]
+
+# wrangler secret put WORKER_SECRET
