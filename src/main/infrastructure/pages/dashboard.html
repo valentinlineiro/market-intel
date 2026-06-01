@@ -28,6 +28,33 @@
 </head>
 <body>
 <div class="container">
+  <!-- Auth token (stored in memory only, never persisted) -->
+  <div id="auth-bar" style="margin-bottom:16px;display:flex;gap:8px;align-items:center;">
+    <input id="secret-input" type="password" placeholder="Worker secret (para deployar)"
+      style="flex:1;max-width:320px;padding:8px 12px;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#f1f5f9;font-size:0.8rem;">
+    <span id="auth-status" style="font-size:0.75rem;color:#475569;"></span>
+  </div>
+
+  <!-- Copy editor modal -->
+  <div id="modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:100;align-items:center;justify-content:center;">
+    <div style="background:#0f172a;border:1px solid #1e293b;border-radius:16px;padding:32px;width:min(600px,90vw);max-height:90vh;overflow-y:auto;">
+      <h3 style="color:#f1f5f9;margin-bottom:20px;">Editar copy · <span id="modal-segment"></span></h3>
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <label style="font-size:0.75rem;color:#64748b;">Headline</label>
+        <input id="copy-title" type="text" style="padding:10px;background:#020817;border:1px solid #1e293b;border-radius:6px;color:#f1f5f9;font-size:0.9rem;width:100%;">
+        <label style="font-size:0.75rem;color:#64748b;">Subtitle</label>
+        <textarea id="copy-subtitle" rows="3" style="padding:10px;background:#020817;border:1px solid #1e293b;border-radius:6px;color:#f1f5f9;font-size:0.85rem;resize:vertical;width:100%;"></textarea>
+        <label style="font-size:0.75rem;color:#64748b;">CTA</label>
+        <input id="copy-cta" type="text" style="padding:10px;background:#020817;border:1px solid #1e293b;border-radius:6px;color:#f1f5f9;font-size:0.9rem;width:100%;">
+      </div>
+      <div id="modal-status" style="margin-top:12px;font-size:0.8rem;color:#64748b;min-height:1.2em;"></div>
+      <div style="display:flex;gap:12px;margin-top:24px;">
+        <button id="modal-deploy" style="flex:1;padding:12px;background:#3b82f6;color:white;border:none;border-radius:8px;font-weight:600;cursor:pointer;">Deployar</button>
+        <button onclick="closeModal()" style="padding:12px 20px;background:#1e293b;color:#94a3b8;border:none;border-radius:8px;cursor:pointer;">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:32px;">
     <div>
       <div style="font-size:1.5rem;font-weight:700;color:#f1f5f9;">Market Intel</div>
@@ -44,8 +71,8 @@
   <h2>Oportunidades</h2>
   <div class="card" style="overflow-x:auto;">
     <table id="opps-table">
-      <thead><tr><th>Segmento</th><th>Score</th><th>Estado</th><th>Señales</th><th>Resumen</th><th>Landing</th></tr></thead>
-      <tbody id="opps-body"><tr><td colspan="6" class="loading">Cargando...</td></tr></tbody>
+      <thead><tr><th>Segmento</th><th>Score</th><th>Estado</th><th>Señales</th><th>Resumen</th><th>Landing</th><th></th></tr></thead>
+      <tbody id="opps-body"><tr><td colspan="7" class="loading">Cargando...</td></tr></tbody>
     </table>
   </div>
 
@@ -89,6 +116,10 @@
         const landing = o.landing_url
           ? `<a href="${o.landing_url}" style="color:#60a5fa;font-size:0.75rem;" target="_blank">ver</a>`
           : "—";
+        const deployBtn = `<button onclick="openDeploy('${o.segment}')"
+          style="padding:4px 10px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:6px;font-size:0.75rem;cursor:pointer;white-space:nowrap;">
+          ${o.landing_url ? "Regenerar" : "Deploy"}
+        </button>`;
         return `<tr>
           <td>${o.segment}</td>
           <td><strong>${(o.score||0).toFixed(1)}</strong>/10</td>
@@ -96,9 +127,10 @@
           <td>${o.signal_count ?? 0}</td>
           <td style="color:#94a3b8;font-size:0.8rem;">${(o.pain_summary||"").slice(0,60)}</td>
           <td>${landing}</td>
+          <td>${deployBtn}</td>
         </tr>`;
       }).join("");
-      document.getElementById("opps-body").innerHTML = rows || '<tr><td colspan="6" style="color:#475569;">Sin oportunidades todavía.</td></tr>';
+      document.getElementById("opps-body").innerHTML = rows || '<tr><td colspan="7" style="color:#475569;">Sin oportunidades todavía.</td></tr>';
 
       const allLeads = Object.entries(leads.by_segment || {}).flatMap(
         ([seg, entries]) => entries.map(e => ({ seg, ...e }))
@@ -120,6 +152,78 @@
   }
 
   load();
+
+  let currentSegment = null;
+  let currentCopy    = null;
+
+  async function openDeploy(segment) {
+    const secret = document.getElementById("secret-input").value.trim();
+    if (!secret) {
+      alert("Introduce el Worker secret primero.");
+      document.getElementById("secret-input").focus();
+      return;
+    }
+    currentSegment = segment;
+    currentCopy    = null;
+    document.getElementById("modal-segment").textContent = segment;
+    document.getElementById("modal-status").textContent  = "Generando copy con LLM...";
+    document.getElementById("copy-title").value    = "";
+    document.getElementById("copy-subtitle").value = "";
+    document.getElementById("copy-cta").value      = "";
+    document.getElementById("modal-overlay").style.display = "flex";
+
+    try {
+      const res = await fetch(`${WORKER}/synthesize`, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${secret}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ segment }),
+      });
+      if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+      const data = await res.json();
+      currentCopy = data.copy;
+      document.getElementById("copy-title").value    = currentCopy.title    || "";
+      document.getElementById("copy-subtitle").value = currentCopy.subtitle || "";
+      document.getElementById("copy-cta").value      = currentCopy.cta      || "";
+      document.getElementById("modal-status").textContent = "Revisa y edita el copy antes de deployar.";
+    } catch (e) {
+      document.getElementById("modal-status").textContent = `Error: ${e.message}`;
+    }
+  }
+
+  function closeModal() {
+    document.getElementById("modal-overlay").style.display = "none";
+    currentSegment = null;
+    currentCopy    = null;
+  }
+
+  document.getElementById("modal-deploy").addEventListener("click", async () => {
+    if (!currentSegment || !currentCopy) return;
+    const secret = document.getElementById("secret-input").value.trim();
+    const copy = {
+      ...currentCopy,
+      title:    document.getElementById("copy-title").value.trim(),
+      subtitle: document.getElementById("copy-subtitle").value.trim(),
+      cta:      document.getElementById("copy-cta").value.trim(),
+    };
+    document.getElementById("modal-status").textContent = "Deployando...";
+    document.getElementById("modal-deploy").disabled = true;
+    try {
+      const res = await fetch(`${WORKER}/deploy`, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${secret}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ segment: currentSegment, copy }),
+      });
+      if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+      const { url } = await res.json();
+      document.getElementById("modal-status").innerHTML =
+        `✓ Deployado: <a href="${url}" target="_blank" style="color:#60a5fa;">${url}</a>`;
+      setTimeout(() => { closeModal(); load(); }, 2500);
+    } catch (e) {
+      document.getElementById("modal-status").textContent = `Error: ${e.message}`;
+    } finally {
+      document.getElementById("modal-deploy").disabled = false;
+    }
+  });
 </script>
 </body>
 </html>
