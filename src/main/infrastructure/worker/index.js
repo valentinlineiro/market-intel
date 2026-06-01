@@ -16,6 +16,7 @@
  *   GET    /public/stats
  *   GET    /public/opportunities
  *   GET    /public/leads
+ *   GET    /public/discovery
  *
  * Rutas autenticadas (nuevas):
  *   POST   /synthesize   — genera copy vía LLM (sin deployar)
@@ -110,6 +111,9 @@ export default {
         const { run_id, candidates } = await request.json();
         if (!run_id || !Array.isArray(candidates) || !candidates.length)
           return json({ error: "run_id and non-empty candidates required" }, 400);
+        const invalid = candidates.filter(c => !c.profile || !c.pain);
+        if (invalid.length)
+          return json({ error: `${invalid.length} candidate(s) missing required profile/pain fields` }, 400);
         const now = new Date().toISOString();
         const stmt = env.DB.prepare(
           `INSERT INTO discovery_candidates
