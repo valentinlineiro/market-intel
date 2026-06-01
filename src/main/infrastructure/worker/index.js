@@ -24,6 +24,7 @@
 
 import { runGnewsCron } from "./collectors/gnews.js";
 import { synthesizeCopy, buildHtml } from "./synthesize.js";
+import { runDiscovery } from "./discover.js";
 
 const CORS = {
   "Access-Control-Allow-Origin":  "*",
@@ -41,10 +42,11 @@ export default {
     const method = request.method;
 
     // ── Public read-only routes (no auth required for dashboard) ──────────
-    if (method === "GET" && (path === "/public/stats" || path === "/public/opportunities" || path === "/public/leads")) {
+    if (method === "GET" && (path === "/public/stats" || path === "/public/opportunities" || path === "/public/leads" || path === "/public/discovery")) {
       try {
         if (path === "/public/stats")         return await getStats(env.DB);
         if (path === "/public/leads")         return await getLeads(env.DB, url.searchParams);
+        if (path === "/public/discovery")     return await getDiscovery(env.DB);
         return await getOpportunities(env.DB, url.searchParams);
       } catch (err) {
         return json({ error: err.message }, 500);
@@ -102,6 +104,52 @@ export default {
            WHERE segment = ?`
         ).bind(landingUrl, now, segment).run();
         return json({ url: landingUrl });
+      }
+
+      if (path === "/discovery/candidates" && method === "POST") {
+        const { run_id, candidates } = await request.json();
+        if (!run_id || !Array.isArray(candidates) || !candidates.length)
+          return json({ error: "run_id and non-empty candidates required" }, 400);
+        const now = new Date().toISOString();
+        const stmt = env.DB.prepare(
+          `INSERT INTO discovery_candidates
+           (profile, pain, keywords, post_count, discovery_score, income_est, has_deadline, source, run_id, discovered_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        );
+        await env.DB.batch(
+          candidates.map(c => stmt.bind(
+            c.profile, c.pain,
+            JSON.stringify(c.keywords || []),
+            c.post_count || 0, c.discovery_score || 0,
+            c.income_est || null, c.has_deadline ? 1 : 0,
+            c.source || "reddit", run_id, now
+          ))
+        );
+        return json({ saved: candidates.length });
+      }
+
+      if (path === "/discover" && method === "POST") {
+        if (!env.OPENROUTER_API_KEY)
+          return json({ error: "OPENROUTER_API_KEY not configured" }, 503);
+        const candidates = await runDiscovery(env.OPENROUTER_API_KEY);
+        if (!candidates.length) return json({ run_id: null, candidates: [] });
+        const run_id = new Date().toISOString();
+        const now    = run_id;
+        const stmt = env.DB.prepare(
+          `INSERT INTO discovery_candidates
+           (profile, pain, keywords, post_count, discovery_score, income_est, has_deadline, source, run_id, discovered_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        );
+        await env.DB.batch(
+          candidates.map(c => stmt.bind(
+            c.profile, c.pain,
+            JSON.stringify(c.keywords || []),
+            c.post_count || 0, c.discovery_score || 0,
+            c.income_est || null, c.has_deadline ? 1 : 0,
+            "reddit", run_id, now
+          ))
+        );
+        return json({ run_id, candidates });
       }
 
       return json({ error: "not found" }, 404);
@@ -208,6 +256,29 @@ async function getStats(db) {
     top_opportunity: topRow ?? null,
     backend: "worker+d1",
   });
+}
+
+async function getDiscovery(db) {
+  const latest = await db.prepare(
+    "SELECT run_id, discovered_at FROM discovery_candidates ORDER BY id DESC LIMIT 1"
+  ).first();
+  if (!latest) return json({ run_id: null, candidates: [], discovered_at: null });
+
+  const { results } = await db.prepare(
+    "SELECT * FROM discovery_candidates WHERE run_id = ? ORDER BY discovery_score DESC LIMIT 20"
+  ).bind(latest.run_id).all();
+
+  const candidates = (results ?? []).map(r => ({
+    profile:         r.profile,
+    pain:            r.pain,
+    keywords:        JSON.parse(r.keywords || "[]"),
+    post_count:      r.post_count,
+    discovery_score: r.discovery_score,
+    income_est:      r.income_est,
+    has_deadline:    r.has_deadline === 1,
+  }));
+
+  return json({ run_id: latest.run_id, candidates, discovered_at: latest.discovered_at });
 }
 
 async function getLeads(db, params) {
