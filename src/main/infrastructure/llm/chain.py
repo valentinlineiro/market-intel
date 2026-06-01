@@ -55,11 +55,18 @@ def _call_openai(api_key: str, provider: dict, prompt: str, max_tokens: int) -> 
     if provider["name"] == "openrouter":
         headers["HTTP-Referer"] = "https://github.com/valentinlineiro/market-intel"
         headers["X-Title"] = "market-intel"
-    resp = requests.post(provider["url"], headers=headers,
-        json={"model": provider["model"], "max_tokens": max_tokens,
-              "messages": [{"role": "user", "content": prompt}]}, timeout=30)
+    body = {
+        "model": provider["model"],
+        "max_tokens": max_tokens,
+        "messages": [{"role": "user", "content": prompt}],
+    }
+    if provider["name"] == "groq":
+        body["response_format"] = {"type": "json_object"}
+    resp = requests.post(provider["url"], headers=headers, json=body, timeout=30)
     resp.raise_for_status()
-    return resp.json()["choices"][0]["message"]["content"]
+    content = resp.json()["choices"][0]["message"]["content"]
+    log.debug(f"  {provider['name']} raw response: {repr(content[:200])}")
+    return content
 
 
 def _call_anthropic(api_key: str, model: str, prompt: str, max_tokens: int) -> str:

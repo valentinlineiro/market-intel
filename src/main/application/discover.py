@@ -39,10 +39,11 @@ Identifica perfiles profesionales con dolores recurrentes NO incluidos en: {know
 TEXTOS:
 {posts}
 
-Para cada perfil nuevo devuelve JSON:
-{{"profile":"...","pain":"...","keywords":["..."],"post_count":N,"income_estimate":"high|medium_high|medium|low","has_deadline":true|false}}
+Devuelve ÚNICAMENTE un objeto JSON con esta estructura exacta:
+{{"candidates": [{{"profile":"...","pain":"...","keywords":["..."],"post_count":N,"income_estimate":"high|medium_high|medium|low","has_deadline":true}}]}}
 
-Devuelve SOLO un array JSON válido. Si no hay perfiles nuevos devuelve [].
+Si no hay perfiles nuevos: {{"candidates": []}}
+Sin texto adicional, sin backticks, solo JSON.
 """
 
 
@@ -126,12 +127,14 @@ class DiscoverUseCase:
             raw = self._llm.complete(prompt, max_tokens=800)
             raw = raw.replace("```json", "").replace("```", "").strip()
             if not raw:
-                log.warning("Cluster batch: empty LLM response, skipping")
+                log.warning("Cluster batch: empty LLM response")
                 return []
             data = json.loads(raw)
+            if isinstance(data, dict):
+                data = data.get("candidates", [])
             return data if isinstance(data, list) else [data]
         except Exception as e:
-            log.error(f"Cluster batch failed: {e}")
+            log.error(f"Cluster batch failed: {e} | raw={repr(raw[:300]) if 'raw' in locals() else 'N/A'}")
             return []
 
     def _aggregate(self, clusters: list[dict]) -> list[dict]:
