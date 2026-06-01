@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Market Intel — Dashboard</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #020817; color: #e2e8f0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; min-height: 100vh; }
+    .container { max-width: 1100px; margin: 0 auto; padding: 32px 16px; }
+    h2 { font-size: 0.75rem; font-weight: 600; letter-spacing: 0.1em; color: #475569; text-transform: uppercase; margin-bottom: 16px; }
+    .card { background: #0f172a; border: 1px solid #1e293b; border-radius: 12px; padding: 20px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+    .stat { display: flex; flex-direction: column; gap: 4px; }
+    .stat-value { font-size: 2rem; font-weight: 700; color: #f1f5f9; }
+    .stat-label { font-size: 0.75rem; color: #64748b; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    th { text-align: left; padding: 8px 12px; color: #475569; font-weight: 600; border-bottom: 1px solid #1e293b; }
+    td { padding: 10px 12px; border-bottom: 1px solid #0f172a; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 9999px; font-size: 0.7rem; font-weight: 600; }
+    .badge-watching { background: #1e3a5f; color: #60a5fa; }
+    .badge-testing  { background: #1a3a2a; color: #34d399; }
+    .badge-scaling  { background: #3b1f5e; color: #a78bfa; }
+    .badge-killed   { background: #3b1f1f; color: #f87171; }
+    .loading { color: #475569; font-size: 0.875rem; }
+    .error   { color: #f87171; font-size: 0.875rem; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:32px;">
+    <div>
+      <div style="font-size:1.5rem;font-weight:700;color:#f1f5f9;">Market Intel</div>
+      <div style="font-size:0.8rem;color:#475569;margin-top:2px;">Señales de dolor · Cádiz / España</div>
+    </div>
+    <div id="updated" style="font-size:0.75rem;color:#334155;"></div>
+  </div>
+
+  <h2>Resumen</h2>
+  <div class="grid" style="margin-bottom:32px;" id="stats-grid">
+    <div class="card"><p class="loading">Cargando...</p></div>
+  </div>
+
+  <h2>Oportunidades</h2>
+  <div class="card" style="overflow-x:auto;">
+    <table id="opps-table">
+      <thead><tr><th>Segmento</th><th>Score</th><th>Estado</th><th>Señales</th><th>Resumen</th><th>Landing</th></tr></thead>
+      <tbody id="opps-body"><tr><td colspan="6" class="loading">Cargando...</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  const WORKER = "https://market-intel-api.valentinlineiro.workers.dev";
+
+  async function load() {
+    try {
+      const [statsRes, oppsRes] = await Promise.all([
+        fetch(`${WORKER}/public/stats`),
+        fetch(`${WORKER}/public/opportunities`),
+      ]);
+      const stats = await statsRes.json();
+      const opps  = await oppsRes.json();
+
+      document.getElementById("updated").textContent =
+        "Actualizado: " + new Date().toISOString().slice(0,16).replace("T"," ") + " UTC";
+
+      const bySegHtml = Object.entries(stats.by_segment || {})
+        .map(([seg, n]) => `<div class="stat"><span class="stat-value">${n}</span><span class="stat-label">${seg}</span></div>`)
+        .join("");
+      document.getElementById("stats-grid").innerHTML = `
+        <div class="card"><div class="stat"><span class="stat-value">${stats.total_signals ?? 0}</span><span class="stat-label">Total señales</span></div></div>
+        <div class="card"><div class="stat"><span class="stat-value">${stats.total_opportunities ?? 0}</span><span class="stat-label">Oportunidades</span></div></div>
+        <div class="card">${bySegHtml}</div>
+      `;
+
+      const rows = (opps.results || []).map(o => {
+        const badge = `<span class="badge badge-${o.status}">${o.status}</span>`;
+        const landing = o.landing_url
+          ? `<a href="${o.landing_url}" style="color:#60a5fa;font-size:0.75rem;" target="_blank">ver</a>`
+          : "—";
+        return `<tr>
+          <td>${o.segment}</td>
+          <td><strong>${(o.score||0).toFixed(1)}</strong>/10</td>
+          <td>${badge}</td>
+          <td>${o.signal_count ?? 0}</td>
+          <td style="color:#94a3b8;font-size:0.8rem;">${(o.pain_summary||"").slice(0,60)}</td>
+          <td>${landing}</td>
+        </tr>`;
+      }).join("");
+      document.getElementById("opps-body").innerHTML = rows || '<tr><td colspan="6" style="color:#475569;">Sin oportunidades todavía.</td></tr>';
+
+    } catch (e) {
+      document.getElementById("stats-grid").innerHTML = `<div class="card"><p class="error">Error: ${e.message}</p></div>`;
+    }
+  }
+
+  load();
+</script>
+</body>
+</html>

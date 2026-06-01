@@ -1,0 +1,10 @@
+name = "market-intel"
+pages_build_output_dir = "infrastructure/pages"
+
+[[d1_databases]]
+binding       = "DB"
+database_name = "market-intel"
+database_id   = "101dd684-e2df-4edf-97ea-f92be920d1e1"
+
+# wrangler pages secret put TELEGRAM_TOKEN --project-name market-intel
+# wrangler pages secret put TELEGRAM_CHAT_ID --project-name market-intel
