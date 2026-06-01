@@ -1,5 +1,5 @@
 name = "market-intel-api"
-main = "worker/index.js"
+main = "index.js"
 compatibility_date = "2025-01-01"
 
 # ── D1 binding nativo ─────────────────────────────────────────────────────
@@ -10,7 +10,7 @@ compatibility_date = "2025-01-01"
 [[d1_databases]]
 binding       = "DB"
 database_name = "market-intel"
-database_id   = ""        # ← rellenar
+database_id   = "101dd684-e2df-4edf-97ea-f92be920d1e1"
 
 # ── Secrets ───────────────────────────────────────────────────────────────
 # wrangler secret put WORKER_SECRET

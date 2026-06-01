@@ -10,7 +10,7 @@ pages_build_output_dir = "dist"
 [[d1_databases]]
 binding     = "DB"
 database_name = "market-intel"
-database_id = ""          # ← rellenar tras: wrangler d1 create market-intel
+database_id = "101dd684-e2df-4edf-97ea-f92be920d1e1"
 
 # ── Variables de entorno (secrets) ───────────────────────────────────────
 # wrangler pages secret put TELEGRAM_TOKEN
