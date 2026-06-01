@@ -39,14 +39,17 @@ jobs:
           TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
           PYTHONPATH:         src/main
           PYTHONUNBUFFERED:   "1"
+          DISCOVER_LIMIT:     ${{ github.event.inputs.limit || '100' }}
+          DISCOVER_MIN_SCORE: ${{ github.event.inputs.min_score || '3.0' }}
         run: |
           python -c "
+import os
 from infrastructure.llm.chain import LLMChain
 from infrastructure.notifications import TelegramNotifier
 from application.discover import DiscoverUseCase
 uc = DiscoverUseCase(LLMChain(), TelegramNotifier())
 uc.run(
-    limit=int('${{ github.event.inputs.limit || \"100\" }}'),
-    min_score=float('${{ github.event.inputs.min_score || \"3.0\" }}'),
+    limit=int(os.environ.get('DISCOVER_LIMIT', '100')),
+    min_score=float(os.environ.get('DISCOVER_MIN_SCORE', '3.0')),
 )
 "
