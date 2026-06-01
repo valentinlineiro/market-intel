@@ -1,6 +1,18 @@
 // src/main/infrastructure/worker/discover.js
 
-const SUBREDDITS = ["autonomos", "pymes", "emprendimiento", "spain"];
+const HN_QUERIES = [
+  "solo practitioner software pain billing",
+  "freelancer professional bureaucracy",
+  "small practice management software problem",
+  "professional license permit Spain problem",
+];
+
+const NEWS_QUERIES = [
+  "autónomo España software problema hacienda",
+  "profesional liberal burocracia queja",
+  "pyme software gestión problema España",
+];
+
 const KNOWN_SEGMENTS = [
   "Odontólogo / Clínica dental",
   "Docente universitario",
@@ -8,10 +20,10 @@ const KNOWN_SEGMENTS = [
   "Arquitecto",
 ];
 
-const CLUSTER_PROMPT = `Analiza estos posts de Reddit de comunidades profesionales españolas.
+const CLUSTER_PROMPT = `Analiza estos textos de noticias y foros profesionales.
 Identifica perfiles profesionales con dolores recurrentes NO incluidos en: {known}.
 
-POSTS:
+TEXTOS:
 {posts}
 
 Para cada perfil nuevo devuelve JSON:
@@ -35,30 +47,42 @@ export async function runDiscovery(apiKey, limit = 60) {
 }
 
 async function collectBroad(limit) {
-  const headers = { "User-Agent": "market-intel-discover/0.1", "Accept": "application/json" };
-  const seen = new Set();
   const texts = [];
 
-  for (const sub of SUBREDDITS) {
+  for (const query of HN_QUERIES) {
     if (texts.length >= limit) break;
     try {
-      const res = await fetch(
-        `https://www.reddit.com/r/${sub}/new.json?limit=15`,
-        { headers }
-      );
+      const url = `https://hn.algolia.com/api/v1/search?query=${encodeURIComponent(query)}&tags=story,ask_hn&hitsPerPage=12`;
+      const res = await fetch(url, { headers: { "User-Agent": "market-intel/0.1" } });
       if (!res.ok) continue;
       const data = await res.json();
-      for (const child of data.data?.children ?? []) {
-        const p = child.data;
-        if (!p.id || seen.has(p.id)) continue;
-        seen.add(p.id);
-        const body = (p.selftext || "").slice(0, 200);
-        texts.push(body ? `${p.title} — ${body}` : p.title);
+      for (const hit of data.hits ?? []) {
+        const title = (hit.title || "").trim();
+        const body  = (hit.story_text || "").slice(0, 200).trim();
+        if (title) texts.push(body ? `${title} — ${body}` : title);
       }
     } catch (e) {
-      console.error(`r/${sub}:`, e.message);
+      console.error(`HN broad '${query}':`, e.message);
     }
   }
+
+  for (const query of NEWS_QUERIES) {
+    if (texts.length >= limit) break;
+    try {
+      const url = `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=es&gl=ES&ceid=ES:es`;
+      const res = await fetch(url, { headers: { "User-Agent": "market-intel/0.1" } });
+      if (!res.ok) continue;
+      const text = await res.text();
+      const matches = [...text.matchAll(/<title><!\[CDATA\[([^\]]+)\]\]><\/title>|<title>([^<]+)<\/title>/g)];
+      for (const m of matches.slice(1, 11)) { // skip feed title
+        const title = (m[1] || m[2] || "").trim();
+        if (title) texts.push(title);
+      }
+    } catch (e) {
+      console.error(`News RSS '${query}':`, e.message);
+    }
+  }
+
   return texts.slice(0, limit);
 }
 

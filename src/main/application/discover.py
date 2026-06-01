@@ -2,6 +2,8 @@ from __future__ import annotations
 import json
 import logging
 import time
+import xml.etree.ElementTree as ET
+from urllib.parse import quote_plus
 
 import requests
 
@@ -10,26 +12,31 @@ from domain.segments import SEGMENTS
 
 log = logging.getLogger(__name__)
 
-BROAD_SUBREDDITS = [
-    "autonomos", "pymes", "spain", "emprendimiento",
-    "Informatica", "medicina", "veterinaria",
+# Broad queries — sector-agnostic, designed to surface unknown professional pain points.
+# HN Algolia and Google News RSS both accept these without auth and work from CI.
+_HN_QUERIES = [
+    "solo practitioner software pain billing",
+    "freelancer professional bureaucracy",
+    "small practice management software problem",
+    "professional license permit bureaucracy Spain",
+    "Ask HN what software do you hate",
 ]
 
-BROAD_QUERIES = [
-    "autónomo software problema España",
-    "profesional hacienda burocracia queja",
-    "autónomo gestoría cara alternativa",
-    "trámites colegio profesional lento",
-    "software clínica problema España",
+_NEWS_QUERIES = [
+    "autónomo España software problema hacienda",
+    "profesional liberal burocracia queja",
+    "colegio profesional trámites digitales",
+    "pyme software gestión problema",
+    "autónomo facturación electrónica problema",
 ]
 
 _KNOWN = [seg["label"] for seg in SEGMENTS.values()]
 
 _PROMPT = """\
-Analiza estos posts de Reddit de comunidades profesionales españolas.
+Analiza estos textos de noticias y foros profesionales.
 Identifica perfiles profesionales con dolores recurrentes NO incluidos en: {known}.
 
-POSTS:
+TEXTOS:
 {posts}
 
 Para cada perfil nuevo devuelve JSON:
@@ -67,25 +74,47 @@ class DiscoverUseCase:
         return top
 
     def _collect_broad(self, limit: int) -> list[str]:
-        raw, seen = [], set()
-        headers = {"User-Agent": "market-intel-discover/0.1", "Accept": "application/json"}
-        for sub in BROAD_SUBREDDITS:
-            try:
-                r = requests.get(f"https://www.reddit.com/r/{sub}/new.json?limit=15",
-                                 headers=headers, timeout=15)
-                for c in r.json().get("data", {}).get("children", []):
-                    p = c["data"]
-                    pid = p.get("id", "")
-                    if pid and pid not in seen:
-                        seen.add(pid)
-                        title = p.get("title", "")
-                        body = (p.get("selftext") or "")[:200]
-                        raw.append(f"{title} — {body}" if body else title)
-                time.sleep(1.5)
-            except Exception as e:
-                log.error(f"r/{sub}: {e}")
+        raw: list[str] = []
+
+        for query in _HN_QUERIES:
             if len(raw) >= limit:
                 break
+            try:
+                r = requests.get(
+                    "https://hn.algolia.com/api/v1/search",
+                    params={"query": query, "tags": "story,ask_hn", "hitsPerPage": 12},
+                    timeout=15,
+                )
+                r.raise_for_status()
+                for hit in r.json().get("hits", []):
+                    title = (hit.get("title") or "").strip()
+                    body  = (hit.get("story_text") or "")[:200].strip()
+                    if title:
+                        raw.append(f"{title} — {body}" if body else title)
+                time.sleep(1)
+            except Exception as e:
+                log.error(f"HN broad '{query}': {e}")
+
+        for query in _NEWS_QUERIES:
+            if len(raw) >= limit:
+                break
+            try:
+                r = requests.get(
+                    f"https://news.google.com/rss/search?q={quote_plus(query)}&hl=es&gl=ES&ceid=ES:es",
+                    timeout=15,
+                    headers={"User-Agent": "market-intel/0.1"},
+                )
+                r.raise_for_status()
+                root = ET.fromstring(r.content)
+                for item in root.findall(".//item")[:10]:
+                    title = (item.findtext("title") or "").strip()
+                    desc  = (item.findtext("description") or "")[:200].strip()
+                    if title:
+                        raw.append(f"{title} — {desc}" if desc else title)
+                time.sleep(1)
+            except Exception as e:
+                log.error(f"News RSS '{query}': {e}")
+
         return raw[:limit]
 
     def _cluster_batch(self, texts: list[str]) -> list[dict]:

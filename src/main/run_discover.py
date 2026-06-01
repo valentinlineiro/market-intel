@@ -46,7 +46,7 @@ def main():
                     "discovery_score": c.get("discovery_score", 0.0),
                     "income_est":      c.get("income_estimate", None),  # LLM returns 'income_estimate'; Worker expects 'income_est'
                     "has_deadline":    c.get("has_deadline", False),
-                    "source":          "reddit",
+                    "source":          "hn_news",
                 }
                 for c in candidates
             ],
