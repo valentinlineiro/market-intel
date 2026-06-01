@@ -2,11 +2,8 @@ name: Collect — Google Trends
 
 on:
   schedule:
-    - cron: "0 7 * * 1"    # lunes 07:00 UTC (antes del scorer semanal)
+    - cron: "0 7 * * 1"
   workflow_dispatch:
-
-permissions:
-  contents: write
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -14,61 +11,30 @@ env:
 jobs:
   collect:
     runs-on: ubuntu-latest
-    timeout-minutes: 20      # Trends necesita más tiempo por los sleeps anti-429
+    timeout-minutes: 20
 
     steps:
-      - name: Checkout código
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Restaurar DB desde rama data
-        run: |
-          if git ls-remote --exit-code origin data; then
-            git fetch origin data --depth=1
-            git checkout FETCH_HEAD -- market_intel.db
-            echo "DB restaurada ($(du -sh market_intel.db | cut -f1))"
-          else
-            echo "Rama data no existe todavía — se creará con DB vacía"
-          fi
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
 
-      - name: Instalar dependencias
+      - name: Install deps
         run: pip install -r requirements.txt
 
-      - name: Ejecutar collector Google Trends
-        run: python collectors/trends_collector.py
+      - name: Run trends collector
+        run: python -c "
+from infrastructure.collectors.trends import collect
+from infrastructure.db.worker_repo import WorkerSignalRepo
+repo = WorkerSignalRepo()
+from domain.segments import SEGMENTS
+for seg in SEGMENTS:
+    for s in collect(seg):
+        repo.save(s)
+"
         env:
+          WORKER_URL:    ${{ secrets.WORKER_URL }}
+          WORKER_SECRET: ${{ secrets.WORKER_SECRET }}
           PYTHONUNBUFFERED: "1"
-
-      - name: Ejecutar scorer
-        run: python scoring/scorer.py
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          PYTHONUNBUFFERED: "1"
-
-      - name: Guardar DB en rama data
-        run: |
-          git config user.email "actions@github.com"
-          git config user.name "GitHub Actions"
-
-          cp market_intel.db /tmp/market_intel.db
-
-          if git ls-remote --exit-code origin data; then
-            git fetch origin data --depth=1
-            git checkout data
-          else
-            git checkout --orphan data
-            git rm -rf . > /dev/null 2>&1 || true
-          fi
-
-          cp /tmp/market_intel.db market_intel.db
-          git add market_intel.db
-          git diff --cached --quiet \
-            && echo "Sin cambios en DB" \
-            || git commit -m "chore: trends collect $(date -u +'%Y-%m-%dT%H:%M') [skip ci]"
-          git push origin HEAD:data

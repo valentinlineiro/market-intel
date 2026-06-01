@@ -2,7 +2,7 @@ name: Discover
 
 on:
   schedule:
-    - cron: "0 6 * * 3,6"  # Miércoles y sábados 6am UTC
+    - cron: "0 6 * * 3"   # Wednesdays only (was Wed + Sat)
   workflow_dispatch:
     inputs:
       limit:
@@ -15,18 +15,16 @@ on:
 jobs:
   discover:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
 
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
           cache: pip
 
-      - name: Install dependencies
+      - name: Install deps
         run: pip install -r requirements.txt
 
       - name: Run discovery
@@ -37,6 +35,13 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          python discover.py \
-            --limit ${{ github.event.inputs.limit || '100' }} \
-            --min-score ${{ github.event.inputs.min_score || '3.0' }}
+          python -c "
+from infrastructure.llm.chain import LLMChain
+from infrastructure.notifications import TelegramNotifier
+from application.discover import DiscoverUseCase
+uc = DiscoverUseCase(LLMChain(), TelegramNotifier())
+uc.run(
+    limit=int('${{ github.event.inputs.limit || \"100\" }}'),
+    min_score=float('${{ github.event.inputs.min_score || \"3.0\" }}'),
+)
+"

@@ -28,9 +28,9 @@ jobs:
           CHANGED=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || git diff --name-only HEAD)
           echo "Changed files: $CHANGED"
 
-          echo "$CHANGED" | grep -q '^worker/'     && echo "worker=true"  >> $GITHUB_OUTPUT || echo "worker=false"  >> $GITHUB_OUTPUT
-          echo "$CHANGED" | grep -qE '^(.*\.html|functions/)' && echo "pages=true" >> $GITHUB_OUTPUT || echo "pages=false" >> $GITHUB_OUTPUT
-          echo "$CHANGED" | grep -q '^schema\.sql' && echo "schema=true"  >> $GITHUB_OUTPUT || echo "schema=false"  >> $GITHUB_OUTPUT
+          echo "$CHANGED" | grep -q '^infrastructure/worker/' && echo "worker=true" >> $GITHUB_OUTPUT || echo "worker=false" >> $GITHUB_OUTPUT
+          echo "$CHANGED" | grep -q '^infrastructure/pages/'  && echo "pages=true"  >> $GITHUB_OUTPUT || echo "pages=false"  >> $GITHUB_OUTPUT
+          echo "$CHANGED" | grep -q '^schema\.sql'            && echo "schema=true" >> $GITHUB_OUTPUT || echo "schema=false" >> $GITHUB_OUTPUT
 
   # ── D1 schema migration ───────────────────────────────────────────────────
   migrate:
@@ -67,7 +67,7 @@ jobs:
         with:
           apiToken:         ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId:        ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: worker
+          workingDirectory: infrastructure/worker
           command:          deploy
 
   # ── Pages deploy ──────────────────────────────────────────────────────────
@@ -89,4 +89,4 @@ jobs:
         with:
           apiToken:  ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command:   pages deploy . --project-name market-intel --commit-dirty=true
+          command:   pages deploy infrastructure/pages --project-name market-intel --commit-dirty=true

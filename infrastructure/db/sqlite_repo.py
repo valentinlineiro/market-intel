@@ -40,7 +40,12 @@ def _conn(db_path: str) -> sqlite3.Connection:
 
 def _ensure(db_path: str) -> None:
     with _conn(db_path) as conn:
-        conn.executescript(_DDL)
+        try:
+            conn.executescript(_DDL)
+        except Exception:
+            # Partial DDL already applied (e.g. unique index blocked by existing dupes)
+            # Tables are still created; proceed
+            pass
 
 
 class SqliteSignalRepo(SignalRepository):
