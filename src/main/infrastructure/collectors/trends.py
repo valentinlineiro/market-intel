@@ -1,13 +1,19 @@
 import time
 import logging
-from datetime import datetime
+import xml.etree.ElementTree as ET
+from urllib.parse import quote_plus
+
+import requests
 
 from domain.models import Signal, SignalSource
 from domain.segments import SEGMENTS
+from infrastructure.collectors.base import build_signal
 
 log = logging.getLogger(__name__)
 
-TREND_KEYWORDS = {
+BASE_URL = "https://news.google.com/rss/search"
+
+TREND_KEYWORDS: dict[str, list[str]] = {
     "dentista": [
         "verifactu dental",
         "software gestión clínica dental",
@@ -30,78 +36,39 @@ TREND_KEYWORDS = {
     ],
 }
 
-GEO_NATIONAL  = "ES"
-GEO_ANDALUCIA = "ES-AN"
 
-
-def _get_pytrends():
+def _fetch_rss(keyword: str) -> list[dict]:
+    params = f"?q={quote_plus(keyword)}&hl=es&gl=ES&ceid=ES:es"
+    url = BASE_URL + params
     try:
-        from pytrends.request import TrendReq
-        import requests
-        from requests.adapters import HTTPAdapter
-        session = requests.Session()
-        session.headers.update({"Accept-Language": "es-ES,es;q=0.9"})
-        session.mount("https://", HTTPAdapter(max_retries=1))
-        return TrendReq(hl="es-ES", tz=60, timeout=(10, 25), requests_args={"verify": True})
-    except ImportError:
-        log.error("pytrends no instalado")
-        return None
-
-
-def _trend_signal_strength(interest: int, spike: bool) -> float:
-    base = min(interest / 100, 1.0) * 0.7
-    return round(min(base + (0.2 if spike else 0.0), 1.0), 3)
-
-
-def _collect_keyword(pytrends, segment: str, keyword: str, geo: str) -> Signal | None:
-    url_key = f"trends://{geo}/{keyword.replace(' ', '_')}"
-    try:
-        pytrends.build_payload([keyword], cat=0, timeframe="today 1-m", geo=geo)
-        data = pytrends.interest_over_time()
-        if data.empty or keyword not in data.columns:
-            return None
-        series = data[keyword]
-        mean_interest = int(series.mean())
-        last_interest  = int(series.iloc[-1])
-        if mean_interest < 5:
-            return None
-        spike = last_interest > mean_interest * 1.3
-        strength = _trend_signal_strength(mean_interest, spike)
-        location = "Andalucía" if geo == GEO_ANDALUCIA else "España"
-        trend_desc = (
-            f"[Google Trends] '{keyword}' — volumen medio: {mean_interest}/100"
-            f"{', PICO reciente: ' + str(last_interest) + '/100' if spike else ''}"
-            f" (geo={geo})"
-        )
-        return Signal(
-            source=SignalSource.GOOGLE_TRENDS,
-            segment=segment,
-            location=location,
-            raw_text=trend_desc,
-            url=url_key,
-            pain_keywords_found=[keyword],
-            sentiment_score=-min(mean_interest / 100, 1.0),
-            signal_strength=strength,
-            has_active_deadline=bool(SEGMENTS[segment].get("active_deadline")),
-        )
+        r = requests.get(url, timeout=15, headers={"User-Agent": "market-intel/0.1"})
+        r.raise_for_status()
+        root = ET.fromstring(r.content)
+        items = []
+        for item in root.findall(".//item")[:10]:
+            title = (item.findtext("title") or "").strip()
+            desc  = (item.findtext("description") or "").strip()
+            link  = (item.findtext("link") or "").strip()
+            if title:
+                items.append({"text": f"{title}. {desc}".strip(), "url": link})
+        return items
     except Exception as e:
-        log.error(f"trends '{keyword}' [{geo}]: {e}")
-        time.sleep(10)
-        return None
+        log.error(f"news rss '{keyword}': {e}")
+        return []
 
 
 def collect(segment: str) -> list[Signal]:
-    """Returns list of Signal objects — caller persists them."""
-    pytrends = _get_pytrends()
-    if not pytrends:
-        return []
-
     signals: list[Signal] = []
     for keyword in TREND_KEYWORDS.get(segment, []):
-        for geo in [GEO_NATIONAL, GEO_ANDALUCIA]:
-            sig = _collect_keyword(pytrends, segment, keyword, geo)
-            if sig:
+        for item in _fetch_rss(keyword):
+            sig = build_signal(
+                source=SignalSource.GOOGLE_NEWS,
+                segment=segment,
+                text=item["text"],
+                url=item["url"],
+                location="España",
+            )
+            if sig and sig.signal_strength > 0.05:
                 signals.append(sig)
-            time.sleep(5)
-
+        time.sleep(1)
     return signals
