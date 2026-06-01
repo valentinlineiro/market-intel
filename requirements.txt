@@ -5,3 +5,5 @@ feedparser==6.0.12
 pytrends==4.9.2
 rich==13.7.1
 python-dotenv==1.0.1
+pytest==8.3.5
+pytest-mock==3.14.0
