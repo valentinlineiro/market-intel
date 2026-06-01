@@ -8,7 +8,7 @@ from application.ports import PageDeployer
 from infrastructure.db.sqlite_repo import SqliteSignalRepo, SqliteOpportunityRepo
 from infrastructure.db.worker_repo import WorkerSignalRepo, WorkerOpportunityRepo, available as worker_available
 from infrastructure.llm.chain import LLMChain
-from infrastructure.notifications import TelegramNotifier, NoopNotifier
+from infrastructure.notifications import TelegramNotifier
 
 log = logging.getLogger(__name__)
 

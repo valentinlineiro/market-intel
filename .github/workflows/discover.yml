@@ -2,15 +2,18 @@ name: Discover
 
 on:
   schedule:
-    - cron: "0 6 * * 3"   # Wednesdays only (was Wed + Sat)
+    - cron: "0 7 1-7 * 1"  # first Monday of each month
   workflow_dispatch:
     inputs:
       limit:
-        description: "Posts a recolectar"
+        description: "Posts to collect"
         default: "100"
       min_score:
-        description: "Score mínimo para alertar"
+        description: "Minimum score to alert"
         default: "3.0"
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   discover:
@@ -35,6 +38,7 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
           PYTHONPATH:         src/main
+          PYTHONUNBUFFERED:   "1"
         run: |
           python -c "
 from infrastructure.llm.chain import LLMChain

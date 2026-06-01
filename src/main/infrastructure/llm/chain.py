@@ -35,10 +35,6 @@ class LLMChain(LLMProvider):
         raise RuntimeError(f"No LLM provider available. Errors: {'; '.join(errors)}")
 
 
-def active_provider() -> str | None:
-    return next((p["name"] for p in _PROVIDERS if os.getenv(p["env_key"])), None)
-
-
 def _call_openai(api_key: str, provider: dict, prompt: str, max_tokens: int) -> str:
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     if provider["name"] == "openrouter":

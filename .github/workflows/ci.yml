@@ -1,17 +1,41 @@
-name: Deploy
+name: CI / Deploy
 
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
-  group: deploy
+  group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
-  # ── Detect what changed ───────────────────────────────────────────────────
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        run: pytest
+        env:
+          PYTHONPATH: src/main
+
   changes:
+    needs: test
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     outputs:
       worker: ${{ steps.diff.outputs.worker }}
@@ -27,12 +51,10 @@ jobs:
         run: |
           CHANGED=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || git diff --name-only HEAD)
           echo "Changed files: $CHANGED"
-
           echo "$CHANGED" | grep -q '^src/main/infrastructure/worker/' && echo "worker=true" >> $GITHUB_OUTPUT || echo "worker=false" >> $GITHUB_OUTPUT
           echo "$CHANGED" | grep -q '^src/main/infrastructure/pages/'  && echo "pages=true"  >> $GITHUB_OUTPUT || echo "pages=false"  >> $GITHUB_OUTPUT
           echo "$CHANGED" | grep -q '^schema\.sql'                     && echo "schema=true" >> $GITHUB_OUTPUT || echo "schema=false" >> $GITHUB_OUTPUT
 
-  # ── D1 schema migration ───────────────────────────────────────────────────
   migrate:
     needs: changes
     if: needs.changes.outputs.schema == 'true' || github.event_name == 'workflow_dispatch'
@@ -44,11 +66,10 @@ jobs:
       - name: Apply schema
         uses: cloudflare/wrangler-action@v3
         with:
-          apiToken:   ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId:  ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command:    d1 execute market-intel --file=schema.sql --remote --yes
+          apiToken:  ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command:   d1 execute market-intel --file=schema.sql --remote --yes
 
-  # ── Worker deploy ─────────────────────────────────────────────────────────
   deploy-worker:
     needs: [changes, migrate]
     if: |
@@ -70,7 +91,6 @@ jobs:
           workingDirectory: src/main/infrastructure/worker
           command:          deploy
 
-  # ── Pages deploy ──────────────────────────────────────────────────────────
   deploy-pages:
     needs: [changes, migrate]
     if: |
