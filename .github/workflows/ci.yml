@@ -49,7 +49,12 @@ jobs:
       - name: Detect changed paths
         id: diff
         run: |
-          CHANGED=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || git diff --name-only HEAD)
+          BASE="${{ github.event.before }}"
+          # On first push or when before is unavailable, diff against parent
+          if [ -z "$BASE" ] || ! git cat-file -e "$BASE" 2>/dev/null; then
+            BASE="HEAD~1"
+          fi
+          CHANGED=$(git diff --name-only "$BASE" HEAD 2>/dev/null || git diff --name-only HEAD)
           echo "Changed files: $CHANGED"
           echo "$CHANGED" | grep -q '^src/main/infrastructure/worker/' && echo "worker=true" >> $GITHUB_OUTPUT || echo "worker=false" >> $GITHUB_OUTPUT
           echo "$CHANGED" | grep -q '^src/main/infrastructure/pages/'  && echo "pages=true"  >> $GITHUB_OUTPUT || echo "pages=false"  >> $GITHUB_OUTPUT
