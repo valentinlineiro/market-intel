@@ -1,5 +1,11 @@
 {
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
   "devDependencies": {
+    "vitest": "^2.0.0",
     "wrangler": "^4.95.0"
   }
 }
