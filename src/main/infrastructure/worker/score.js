@@ -151,7 +151,8 @@ export async function runScore(env, topN = 10, minScore = 1.0, dryRun = false) {
            emails_captured, validation_deadline, telegram_alerted_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
-          score=excluded.score, score_breakdown=excluded.score_breakdown,
+          pain_summary=excluded.pain_summary, score=excluded.score,
+          score_breakdown=excluded.score_breakdown,
           signal_ids=excluded.signal_ids, signal_count=excluded.signal_count,
           last_updated=excluded.last_updated, status=excluded.status,
           emails_captured=excluded.emails_captured, landing_url=excluded.landing_url,
