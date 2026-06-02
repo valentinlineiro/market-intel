@@ -119,6 +119,8 @@ jobs:
       - name: Deploy Pages
         uses: cloudflare/wrangler-action@v3
         with:
-          apiToken:  ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command:   pages deploy src/main/infrastructure/pages/static --project-name market-intel --commit-dirty=true
+          apiToken:         ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId:        ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion:  "4"
+          workingDirectory: src/main/infrastructure/pages
+          command:          pages deploy static --project-name market-intel --commit-dirty=true
