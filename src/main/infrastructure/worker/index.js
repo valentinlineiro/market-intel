@@ -27,6 +27,8 @@ import { runGnewsCron } from "./collectors/gnews.js";
 import { runLocalNewsCron } from "./collectors/local_news.js";
 import { synthesizeCopy, buildHtml } from "./synthesize.js";
 import { runDiscovery } from "./discover.js";
+import { runScore } from "./score.js";
+import { sendTelegram } from "./notify.js";
 
 const CORS = {
   "Access-Control-Allow-Origin":  "*",
@@ -154,7 +156,26 @@ export default {
             "reddit", run_id, now
           ))
         );
+        const top5 = candidates.slice(0, 5);
+        if (top5.length && env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID) {
+          const lines = ["🔍 *Segmentos ocultos detectados*\n"];
+          for (const [i, c] of top5.entries()) {
+            lines.push(`*${i + 1}. ${c.profile}*\n  Dolor: ${c.pain}\n  Score: ${c.discovery_score}\n`);
+          }
+          await sendTelegram(env, lines.join("\n"));
+        }
         return json({ run_id, candidates });
+      }
+
+      if (path === "/score" && method === "POST") {
+        const body = await request.json().catch(() => ({}));
+        const results = await runScore(
+          env,
+          body.top_n ?? 10,
+          body.min_score ?? 1.0,
+          body.dry_run ?? false,
+        );
+        return json({ results });
       }
 
       return json({ error: "not found" }, 404);
@@ -166,10 +187,12 @@ export default {
   },
 
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(Promise.all([
-      runGnewsCron(env.DB),
-      runLocalNewsCron(env),
-    ]));
+    ctx.waitUntil(
+      Promise.all([
+        runGnewsCron(env.DB),
+        runLocalNewsCron(env),
+      ]).then(() => runScore(env, 10, 1.0, false))
+    );
   },
 };
 
