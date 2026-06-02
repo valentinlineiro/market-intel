@@ -12,3 +12,6 @@ migrations_dir = "migrations"
 crons = ["0 */12 * * *"]
 
 # wrangler secret put WORKER_SECRET
+
+[vars]
+LOCAL_NEWS_LOCATION = "Cádiz"

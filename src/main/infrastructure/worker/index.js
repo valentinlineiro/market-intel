@@ -24,6 +24,7 @@
  */
 
 import { runGnewsCron } from "./collectors/gnews.js";
+import { runLocalNewsCron } from "./collectors/local_news.js";
 import { synthesizeCopy, buildHtml } from "./synthesize.js";
 import { runDiscovery } from "./discover.js";
 
@@ -165,7 +166,10 @@ export default {
   },
 
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(runGnewsCron(env.DB));
+    ctx.waitUntil(Promise.all([
+      runGnewsCron(env.DB),
+      runLocalNewsCron(env),
+    ]));
   },
 };
 
