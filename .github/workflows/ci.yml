@@ -123,4 +123,4 @@ jobs:
           accountId:        ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           wranglerVersion:  "4"
           workingDirectory: src/main/infrastructure/pages
-          command:          pages deploy static --project-name market-intel --commit-dirty=true
+          command:          pages deploy --project-name market-intel --commit-dirty=true

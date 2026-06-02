@@ -1,5 +1,6 @@
 name = "market-intel"
-pages_build_output_dir = "infrastructure/pages"
+pages_build_output_dir = "static"
+compatibility_date = "2025-01-01"
 
 [[d1_databases]]
 binding       = "DB"
