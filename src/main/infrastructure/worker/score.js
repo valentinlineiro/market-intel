@@ -13,6 +13,7 @@ export const SCALE_SCORE_THRESHOLD = 8.0;
 export const ALERT_SCORE_THRESHOLD = 7.0;
 
 const SALARY_TIERS = { high: 10, medium_high: 7, medium: 5, low: 2 };
+const DEFAULT_COMPETENCIA_SCORE = 5.0;
 
 export function computeOpportunityScore(breakdown) {
   const raw = Object.entries(SCORE_WEIGHTS).reduce(
@@ -48,7 +49,8 @@ export function dolorScore(signals) {
     const w = new Date(s.collected_at).getTime() > weekAgo ? 2.0 : 1.0;
     weighted += (s.signal_strength ?? 0) * w;
     totalW += w;
-    const kws = JSON.parse(s.pain_keywords || "[]");
+    let kws = [];
+    try { kws = JSON.parse(s.pain_keywords || "[]"); } catch { kws = []; }
     allKw.push(...kws);
   }
 
@@ -66,7 +68,7 @@ export function dolorScore(signals) {
 export function applyRules(opp) {
   if (opp.status === "killed" || opp.status === "scaling") return opp;
   const ageDays = (Date.now() - new Date(opp.first_seen).getTime()) / 86400000;
-  if (opp.signal_count === 0 && ageDays >= (opp.kill_threshold_days ?? 7) && opp.score < KILL_SCORE_THRESHOLD) {
+  if ((opp.signal_count ?? 0) === 0 && ageDays >= (opp.kill_threshold_days ?? 7) && opp.score < KILL_SCORE_THRESHOLD) {
     return { ...opp, status: "killed" };
   }
   if (opp.score >= SCALE_SCORE_THRESHOLD && (opp.emails_captured ?? 0) >= (opp.scale_threshold_emails ?? 30)) {
@@ -111,7 +113,7 @@ export async function runScore(env, topN = 10, minScore = 1.0, dryRun = false) {
       dolor,
       capacidad_pago: incomeTierScore(seg.income_tier),
       volumen: volumeScore(seg.discovery_score),
-      competencia: 5.0,
+      competencia: DEFAULT_COMPETENCIA_SCORE,
       urgencia: urgencyScore(seg.has_deadline),
     };
     const score = computeOpportunityScore(breakdown);
