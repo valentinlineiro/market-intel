@@ -4,43 +4,17 @@ on:
   schedule:
     - cron: "0 7 1-7 * 1"  # first Monday of each month
   workflow_dispatch:
-    inputs:
-      limit:
-        description: "Posts to collect"
-        default: "100"
-      min_score:
-        description: "Minimum score to alert"
-        default: "3.0"
-
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   discover:
     runs-on: ubuntu-latest
-
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
-
-      - name: Install deps
-        run: pip install -r requirements.txt
-
-      - name: Run discovery
+      - name: Trigger discovery on Worker
         env:
-          GROQ_API_KEY:       ${{ secrets.GROQ_API_KEY }}
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          ANTHROPIC_API_KEY:  ${{ secrets.ANTHROPIC_API_KEY }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
-          PYTHONPATH:         src/main
-          PYTHONUNBUFFERED:   "1"
-          DISCOVER_LIMIT:     "${{ github.event.inputs.limit || '100' }}"
-          DISCOVER_MIN_SCORE: "${{ github.event.inputs.min_score || '3.0' }}"
-          WORKER_URL:         ${{ secrets.WORKER_URL }}
-          WORKER_SECRET:      ${{ secrets.WORKER_SECRET }}
-        run: python src/main/run_discover.py
+          WORKER_URL: ${{ secrets.WORKER_URL }}
+          WORKER_SECRET: ${{ secrets.WORKER_SECRET }}
+        run: |
+          curl -f -s -X POST "${WORKER_URL}/discover" \
+            -H "Authorization: Bearer ${WORKER_SECRET}" \
+            -H "Content-Type: application/json" \
+            -d '{}' | jq .
