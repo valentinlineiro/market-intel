@@ -121,4 +121,4 @@ jobs:
         with:
           apiToken:  ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command:   pages deploy src/main/infrastructure/pages --project-name market-intel --commit-dirty=true
+          command:   pages deploy src/main/infrastructure/pages/static --project-name market-intel --commit-dirty=true
