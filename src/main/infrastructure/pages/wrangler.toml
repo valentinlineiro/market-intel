@@ -1,14 +1,3 @@
 name = "market-intel"
-pages_build_output_dir = "static"
-compatibility_date = "2025-01-01"
-
-[[d1_databases]]
-binding       = "DB"
-database_name = "market-intel"
-database_id   = "101dd684-e2df-4edf-97ea-f92be920d1e1"
-
-[[send_email]]
-binding = "EMAIL"
-
-# wrangler pages secret put NOTIFICATION_EMAIL_RECIPIENT --project-name market-intel
-# wrangler pages secret put NOTIFICATION_EMAIL_FROM --project-name market-intel
+compatibility_date = "2026-01-01"
+pages_build_output_dir = ".svelte-kit/cloudflare"
