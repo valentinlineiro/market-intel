@@ -51,8 +51,7 @@ export function volumeScore(discoveryScore: number): number {
  * Returns [dolorScore, painSummary].
  * Considers signals from the last 30 days; weights recent (< 7 days) higher.
  */
-export function dolorScore(signals: Signal[]): [number, string] {
-  const now = Date.now();
+export function dolorScore(signals: Signal[], now: number = Date.now()): [number, string] {
   const cutoff = now - 30 * 86400000;
   const weekAgo = now - 7 * 86400000;
   const recent = signals.filter(s => new Date(s.collected_at).getTime() > cutoff);
@@ -119,7 +118,7 @@ export function applyRules(
 }
 
 export function shouldAlert(opp: Opportunity): boolean {
-  return opp.telegram_alerted_at === null;
+  return opp.score >= ALERT_SCORE_THRESHOLD && opp.telegram_alerted_at === null;
 }
 
 export function formatAlert(

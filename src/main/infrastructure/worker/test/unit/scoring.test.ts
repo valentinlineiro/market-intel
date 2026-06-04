@@ -41,11 +41,11 @@ describe("computeOpportunityScore", () => {
       competencia: 10,
       urgencia: 10,
     };
-    // sum of weights = 0.35+0.25+0.20+0.10+0.10 = 1.0, so 10*1.0 = 10
+    // sum of weights = 0.30+0.25+0.20+0.15+0.10 = 1.0, so 10*1.0 = 10
     expect(computeOpportunityScore(breakdown)).toBe(10);
   });
 
-  it("weighs dolor at 0.35", () => {
+  it("weighs dolor at 0.30", () => {
     const breakdown = {
       dolor: 10,
       capacidad_pago: 0,
@@ -67,7 +67,7 @@ describe("computeOpportunityScore", () => {
       urgencia: 1,
     };
     const result = computeOpportunityScore(breakdown);
-    expect(result).toBe(1); // 1 * (0.35+0.25+0.20+0.10+0.10) = 1.00
+    expect(result).toBe(1); // 1 * (0.30+0.25+0.20+0.15+0.10) = 1.00
   });
 });
 
@@ -76,14 +76,16 @@ describe("computeOpportunityScore", () => {
 // ---------------------------------------------------------------------------
 
 describe("dolorScore", () => {
+  const FIXED_NOW = 1_700_000_000_000; // fixed timestamp for deterministic tests
+
   it("returns 0 for empty signals array", () => {
-    const [score, summary] = dolorScore([]);
+    const [score, summary] = dolorScore([], FIXED_NOW);
     expect(score).toBe(0);
     expect(summary).toBe("");
   });
 
   it("returns 0 for signals older than 30 days", () => {
-    const old = new Date(Date.now() - 31 * 86400000).toISOString();
+    const old = new Date(FIXED_NOW - 31 * 86400000).toISOString();
     const signal: Signal = {
       id: "s1",
       source: "gnews",
@@ -99,16 +101,16 @@ describe("dolorScore", () => {
       signal_strength: 0.8,
       has_deadline: false,
     };
-    const [score] = dolorScore([signal]);
+    const [score] = dolorScore([signal], FIXED_NOW);
     expect(score).toBe(0);
   });
 
   it("returns score > 0 for recent signals", () => {
-    const now = new Date().toISOString();
+    const recentTs = new Date(FIXED_NOW - 86400000).toISOString(); // 1 day ago
     const signals: Signal[] = Array.from({ length: 10 }, (_, i) => ({
       id: `s${i}`,
       source: "gnews" as const,
-      collected_at: now,
+      collected_at: recentTs,
       segment: "test",
       location: null,
       raw_text: "text",
@@ -120,17 +122,17 @@ describe("dolorScore", () => {
       signal_strength: 0.8,
       has_deadline: false,
     }));
-    const [score, summary] = dolorScore(signals);
+    const [score, summary] = dolorScore(signals, FIXED_NOW);
     expect(score).toBeGreaterThan(0);
     expect(summary).toMatch(/burocracia|multa|señales/);
   });
 
   it("never exceeds 10", () => {
-    const now = new Date().toISOString();
+    const recentTs = new Date(FIXED_NOW - 86400000).toISOString(); // 1 day ago
     const signals: Signal[] = Array.from({ length: 100 }, (_, i) => ({
       id: `s${i}`,
       source: "gnews" as const,
-      collected_at: now,
+      collected_at: recentTs,
       segment: "test",
       location: null,
       raw_text: "text",
@@ -142,7 +144,7 @@ describe("dolorScore", () => {
       signal_strength: 1.0,
       has_deadline: false,
     }));
-    const [score] = dolorScore(signals);
+    const [score] = dolorScore(signals, FIXED_NOW);
     expect(score).toBeLessThanOrEqual(10);
   });
 });
@@ -289,6 +291,26 @@ describe("shouldAlert", () => {
       emails_captured: 0,
       validation_deadline: null,
       telegram_alerted_at: new Date().toISOString(),
+    };
+    expect(shouldAlert(opp)).toBe(false);
+  });
+
+  it("returns false when score is below threshold even if telegram_alerted_at is null", () => {
+    const opp: Opportunity = {
+      id: "x",
+      segment: "s",
+      pain_summary: "",
+      score: ALERT_SCORE_THRESHOLD - 0.1,
+      score_breakdown: { dolor: 5, capacidad_pago: 5, volumen: 5, competencia: 5, urgencia: 5 },
+      signal_ids: [],
+      signal_count: 0,
+      first_seen: new Date().toISOString(),
+      last_updated: new Date().toISOString(),
+      status: "watching",
+      landing_url: null,
+      emails_captured: 0,
+      validation_deadline: null,
+      telegram_alerted_at: null,
     };
     expect(shouldAlert(opp)).toBe(false);
   });
