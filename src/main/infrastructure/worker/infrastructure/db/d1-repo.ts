@@ -238,7 +238,7 @@ export class D1Repo implements ISignalRepo, IOpportunityRepo, ILeadRepo, IDiscov
     const { results } = segment
       ? await this.db
           .prepare(
-            'SELECT id, email, segment, captured_at FROM leads WHERE segment = ? ORDER BY captured_at DESC',
+            'SELECT id, email, segment, captured_at FROM leads WHERE segment = ? ORDER BY captured_at DESC LIMIT 200',
           )
           .bind(segment)
           .all<Record<string, unknown>>()
@@ -258,9 +258,9 @@ export class D1Repo implements ISignalRepo, IOpportunityRepo, ILeadRepo, IDiscov
     const run_id = new Date().toISOString();
     const stmt = this.db.prepare(`
       INSERT INTO discovery_candidates
-        (profile, pain, keywords, post_count, discovery_score, income_est,
+        (profile, pain, keywords, source_urls, post_count, discovery_score, income_est,
          has_deadline, source, run_id, discovered_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     await this.db.batch(
@@ -268,6 +268,7 @@ export class D1Repo implements ISignalRepo, IOpportunityRepo, ILeadRepo, IDiscov
         stmt.bind(
           c.segment,
           c.pain_summary,
+          JSON.stringify([]),
           JSON.stringify(c.source_urls ?? []),
           c.raw_signals?.length ?? 0,
           c.discovery_score ?? 0,
@@ -304,7 +305,7 @@ export class D1Repo implements ISignalRepo, IOpportunityRepo, ILeadRepo, IDiscov
       segment:         r['profile'] as string,
       pain_summary:    r['pain'] as string,
       discovery_score: r['discovery_score'] as number,
-      source_urls:     parseJson<string[]>(r['keywords'], []),
+      source_urls:     parseJson<string[]>(r['source_urls'], []),
       raw_signals:     [],
       discovered_at:   r['discovered_at'] as string,
     }));
@@ -383,7 +384,7 @@ export class D1Repo implements ISignalRepo, IOpportunityRepo, ILeadRepo, IDiscov
     return row ? (row['html'] as string) : null;
   }
 
-  async saveLanding(segment: string, html: string, url: string): Promise<void> {
+  async saveLanding(segment: string, html: string, title: string): Promise<void> {
     const now = new Date().toISOString();
     await this.db
       .prepare(`
@@ -392,7 +393,7 @@ export class D1Repo implements ISignalRepo, IOpportunityRepo, ILeadRepo, IDiscov
         ON CONFLICT(segment) DO UPDATE SET
           html=excluded.html, title=excluded.title, deployed_at=excluded.deployed_at
       `)
-      .bind(segment, html, url, now)
+      .bind(segment, html, title, now)
       .run();
   }
 
