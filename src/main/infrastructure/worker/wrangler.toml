@@ -12,6 +12,6 @@ migrations_dir = "migrations"
 crons = ["0 */12 * * *"]
 
 [[send_email]]
-binding = "EMAIL"
+name = "EMAIL"
 
 # wrangler secret put WORKER_SECRET
