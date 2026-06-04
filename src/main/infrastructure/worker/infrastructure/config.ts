@@ -111,29 +111,42 @@ export const DEFAULT_CONFIG: Config = {
 };
 
 export async function getConfig(db: D1Database): Promise<Config> {
-  const row = await db.prepare("SELECT updated_at FROM config WHERE key = 'app'").first() as Record<string, unknown> | null;
+  const row = await db.prepare("SELECT value, updated_at FROM config WHERE key = 'app' LIMIT 1").first() as Record<string, unknown> | null;
   if (row && cachedConfig && cachedVersion === row['updated_at']) {
     return cachedConfig;
   }
   if (row) {
-    const full = await db.prepare("SELECT value FROM config WHERE key = 'app'").first() as Record<string, unknown> | null;
-    if (full) {
-      cachedConfig = JSON.parse(full['value'] as string) as Config;
-      cachedVersion = row['updated_at'] as string;
-      return cachedConfig;
-    }
+    cachedConfig = JSON.parse(row['value'] as string) as Config;
+    cachedVersion = row['updated_at'] as string;
+    return cachedConfig;
   }
   return DEFAULT_CONFIG;
 }
 
-export async function setConfig(db: D1Database, value: Partial<Config>): Promise<void> {
+export async function setConfig(db: D1Database, updates: Partial<Config>): Promise<void> {
+  const current = await getConfig(db);
+  const merged = deepMerge(structuredClone(current), updates);
   const now = new Date().toISOString();
   await db.prepare(
     `INSERT INTO config (key, value, updated_at) VALUES ('app', ?, ?)
      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
-  ).bind(JSON.stringify(value), now).run();
-  cachedConfig = value as Config;
+  ).bind(JSON.stringify(merged), now).run();
+  cachedConfig = merged;
   cachedVersion = now;
+}
+
+function deepMerge<T extends object>(target: T, source: Partial<T>): T {
+  for (const key of Object.keys(source) as (keyof T)[]) {
+    const srcVal = source[key];
+    const tgtVal = target[key];
+    if (srcVal !== null && typeof srcVal === 'object' && !Array.isArray(srcVal) &&
+        tgtVal !== null && typeof tgtVal === 'object' && !Array.isArray(tgtVal)) {
+      target[key] = deepMerge(tgtVal as object, srcVal as object) as T[keyof T];
+    } else if (srcVal !== undefined) {
+      target[key] = srcVal as T[keyof T];
+    }
+  }
+  return target;
 }
 
 export function invalidateCache(): void {
