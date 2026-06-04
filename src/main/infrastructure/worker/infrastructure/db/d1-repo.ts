@@ -376,6 +376,40 @@ export class D1Repo implements ISignalRepo, IOpportunityRepo, ILeadRepo, IDiscov
 
   // ── Extra methods (used by index.ts routing) ─────────────────────────────
 
+  async updateOpportunityLanding(segment: string, landingUrl: string, status: string, now: string): Promise<void> {
+    await this.db.prepare(
+      'UPDATE opportunities SET landing_url = ?, status = ?, last_updated = ? WHERE segment = ?'
+    ).bind(landingUrl, status, now, segment).run();
+  }
+
+  async replaceCandidatesWithRunId(runId: string, candidates: Array<{
+    profile?: string;
+    pain?: string;
+    keywords?: string[];
+    post_count?: number;
+    discovery_score?: number;
+    income_est?: string | null;
+    has_deadline?: boolean;
+    source?: string;
+  }>): Promise<void> {
+    if (!candidates.length) return;
+    const now = new Date().toISOString();
+    const stmt = this.db.prepare(
+      `INSERT INTO discovery_candidates
+       (profile, pain, keywords, post_count, discovery_score, income_est, has_deadline, source, run_id, discovered_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+    await this.db.batch(
+      candidates.map(c => stmt.bind(
+        c.profile, c.pain,
+        JSON.stringify(c.keywords ?? []),
+        c.post_count ?? 0, c.discovery_score ?? 0,
+        c.income_est ?? null, c.has_deadline ? 1 : 0,
+        c.source ?? 'reddit', runId, now
+      ))
+    );
+  }
+
   async getLandingHtml(segment: string): Promise<string | null> {
     const row = await this.db
       .prepare('SELECT html FROM landing_pages WHERE segment = ?')
@@ -395,6 +429,28 @@ export class D1Repo implements ISignalRepo, IOpportunityRepo, ILeadRepo, IDiscov
       `)
       .bind(segment, html, title, now)
       .run();
+  }
+
+  async getStatsBySegment(): Promise<Array<{ segment: string; count: number }>> {
+    const rows = await this.db.prepare(
+      'SELECT segment, COUNT(*) as count FROM signals GROUP BY segment ORDER BY count DESC'
+    ).all<Record<string, unknown>>();
+    return (rows.results ?? []).map(r => ({
+      segment: r['segment'] as string,
+      count: Number(r['count']),
+    }));
+  }
+
+  async getTopOpportunity(): Promise<{ segment: string; score: number; pain_summary: string | null } | null> {
+    const row = await this.db.prepare(
+      'SELECT segment, score, pain_summary FROM opportunities ORDER BY score DESC LIMIT 1'
+    ).first<Record<string, unknown>>();
+    if (!row) return null;
+    return {
+      segment: row['segment'] as string,
+      score: Number(row['score']),
+      pain_summary: (row['pain_summary'] as string | null) ?? null,
+    };
   }
 
   async getStats(): Promise<{

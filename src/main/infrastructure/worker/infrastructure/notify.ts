@@ -15,7 +15,7 @@ export type EmailMessage = {
 
 export class EmailNotifier implements INotifier {
   constructor(
-    private readonly email: SendEmail,
+    private readonly email: SendEmail | undefined,
     private readonly cfg: Config['notifications'],
   ) {}
 

@@ -33,6 +33,7 @@ import { getConfig, setConfig, invalidateCache } from './infrastructure/config.j
 import { D1Repo } from './infrastructure/db/d1-repo.js';
 import { LLMChain } from './infrastructure/llm/chain.js';
 import { EmailNotifier } from './infrastructure/notify.js';
+import type { SendEmail } from './infrastructure/notify.js';
 import { collectGnews } from './infrastructure/collectors/gnews.js';
 import { collectLocalNews } from './infrastructure/collectors/local_news.js';
 import { runCollect } from './application/collect.js';
@@ -49,15 +50,7 @@ export interface Env {
   WORKER_SECRET: string;
   GROQ_API_KEY?: string;
   OPENROUTER_API_KEY?: string;
-  EMAIL?: {
-    send(message: {
-      to: string;
-      from: { email: string; name?: string };
-      subject: string;
-      html?: string;
-      text?: string;
-    }): Promise<void>;
-  };
+  EMAIL?: SendEmail;
 }
 
 // ---------------------------------------------------------------------------
@@ -195,10 +188,7 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env) => {
       const d1repo = new D1Repo(env.DB);
       await d1repo.saveLanding(segment, html, title);
       const landingUrl = `https://market-intel.pages.dev/landings/${segment}`;
-      await env.DB.prepare(
-        `UPDATE opportunities SET landing_url = ?, status = 'testing', last_updated = ?
-         WHERE segment = ?`
-      ).bind(landingUrl, now, segment).run();
+      await d1repo.updateOpportunityLanding(segment, landingUrl, 'testing', now);
       return json({ url: landingUrl });
     }
 
@@ -221,21 +211,8 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env) => {
       const invalid = candidates.filter(c => !c.profile || !c.pain);
       if (invalid.length)
         return json({ error: `${invalid.length} candidate(s) missing required profile/pain fields` }, 400);
-      const now = new Date().toISOString();
-      const stmt = env.DB.prepare(
-        `INSERT INTO discovery_candidates
-         (profile, pain, keywords, post_count, discovery_score, income_est, has_deadline, source, run_id, discovered_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-      );
-      await env.DB.batch(
-        candidates.map(c => stmt.bind(
-          c.profile, c.pain,
-          JSON.stringify(c.keywords ?? []),
-          c.post_count ?? 0, c.discovery_score ?? 0,
-          c.income_est ?? null, c.has_deadline ? 1 : 0,
-          c.source ?? 'reddit', run_id, now
-        ))
-      );
+      const d1repo = new D1Repo(env.DB);
+      await d1repo.replaceCandidatesWithRunId(run_id, candidates);
       return json({ saved: candidates.length });
     }
 
@@ -245,7 +222,7 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env) => {
 
       const cfg = await getConfig(env.DB);
       const llm = new LLMChain(cfg.llm, env.GROQ_API_KEY, env.OPENROUTER_API_KEY);
-      const notifier = new EmailNotifier(env.EMAIL!, cfg.notifications);
+      const notifier = new EmailNotifier(env.EMAIL, cfg.notifications);
 
       // Fetch raw texts from HN Algolia and Google News RSS
       const texts = await collectDiscoveryTexts();
@@ -272,7 +249,7 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env) => {
       const cfg = await getConfig(env.DB);
       const d1repo = new D1Repo(env.DB);
       const llm = new LLMChain(cfg.llm, env.GROQ_API_KEY, env.OPENROUTER_API_KEY);
-      const notifier = new EmailNotifier(env.EMAIL!, cfg.notifications);
+      const notifier = new EmailNotifier(env.EMAIL, cfg.notifications);
       const results = await runScore(
         { signals: d1repo, opportunities: d1repo, discovery: d1repo },
         notifier,
@@ -301,7 +278,7 @@ const scheduled: ExportedHandlerScheduledHandler<Env> = async (_event, env, ctx)
     const cfg = await getConfig(env.DB);
     const d1repo = new D1Repo(env.DB);
     const llm = new LLMChain(cfg.llm, env.GROQ_API_KEY, env.OPENROUTER_API_KEY);
-    const notifier = new EmailNotifier(env.EMAIL!, cfg.notifications);
+    const notifier = new EmailNotifier(env.EMAIL, cfg.notifications);
 
     // Collect
     const gnewsCollector = () => collectGnews(cfg.collectors.gnews.segments, env.GROQ_API_KEY ?? '');
@@ -331,7 +308,7 @@ export default { fetch: handleFetch, scheduled } satisfies ExportedHandler<Env>;
 
 async function handleGetSignals(db: D1Database, params: URLSearchParams): Promise<Response> {
   const segment = params.get('segment');
-  const limit   = Math.min(parseInt(params.get('limit') ?? '100'), 500);
+  const limit   = Math.min(parseInt(params.get('limit') ?? '100') || 100, 500);
   const { results } = segment
     ? await db.prepare('SELECT * FROM signals WHERE segment = ? ORDER BY collected_at DESC LIMIT ?').bind(segment, limit).all()
     : await db.prepare('SELECT * FROM signals ORDER BY collected_at DESC LIMIT ?').bind(limit).all();
@@ -405,15 +382,13 @@ async function handleUpsertOpportunity(db: D1Database, o: Record<string, unknown
 }
 
 async function handleGetStats(d1repo: D1Repo): Promise<Response> {
-  const stats = await d1repo.getStats();
-  // Also get by-segment breakdown and top opportunity for parity with the old JS handler
-  const db = (d1repo as unknown as { db: D1Database })['db'];
-  const [bySegRows, topRow] = await Promise.all([
-    db.prepare('SELECT segment, COUNT(*) as n FROM signals GROUP BY segment').all<Record<string, unknown>>(),
-    db.prepare('SELECT score, pain_summary FROM opportunities ORDER BY score DESC LIMIT 1').first<Record<string, unknown>>(),
+  const [stats, bySegRows, topRow] = await Promise.all([
+    d1repo.getStats(),
+    d1repo.getStatsBySegment(),
+    d1repo.getTopOpportunity(),
   ]);
-  const by_segment: Record<string, unknown> = {};
-  for (const r of bySegRows.results ?? []) by_segment[r['segment'] as string] = r['n'];
+  const by_segment: Record<string, number> = {};
+  for (const r of bySegRows) by_segment[r.segment] = r.count;
   return json({
     total_signals:       stats.signals,
     total_opportunities: stats.opportunities,
