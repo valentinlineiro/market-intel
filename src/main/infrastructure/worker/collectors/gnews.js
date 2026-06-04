@@ -1,31 +1,4 @@
-/**
- * gnews.js — Google News RSS cron collector
- * Runs every 12h via Cloudflare Cron Trigger.
- * Fetches news for each segment, writes signals to D1.
- */
-
-const SEGMENTS = {
-  dentista: {
-    queries: ["verifactu dentista", "software dental hacienda", "facturación electrónica clínica dental", "RRSIF odontología"],
-    keywords: ["verifactu", "hacienda", "facturación", "rrsif", "multa", "gestión clínica"],
-    salary_mean: 66500, income_tier: "high", has_deadline: true,
-  },
-  docente_universitario: {
-    queries: ["ANECA acreditación universidad", "sexenio investigación problema", "Docentia evaluación docente"],
-    keywords: ["aneca", "acreditación", "sexenio", "docentia", "plaza"],
-    salary_mean: 42000, income_tier: "medium_high", has_deadline: false,
-  },
-  abogado_autonomo: {
-    queries: ["LexNet abogados problema", "facturación electrónica abogados autónomos"],
-    keywords: ["lexnet", "facturación", "irpf", "turno oficio", "honorarios"],
-    salary_mean: 35000, income_tier: "medium_high", has_deadline: false,
-  },
-  arquitecto: {
-    queries: ["visado colegial arquitectos", "licencia obras ayuntamiento lentitud"],
-    keywords: ["visado colegial", "licencia obras", "burocracia", "certificado energético"],
-    salary_mean: 28500, income_tier: "medium", has_deadline: false,
-  },
-};
+import { getConfig } from "../config.js";
 
 const GNEWS_BASE = "https://news.google.com/rss/search?hl=es&gl=ES&ceid=ES:es&q=";
 const HEADERS = { "User-Agent": "Mozilla/5.0 (compatible; market-intel/0.1)" };
@@ -87,8 +60,11 @@ async function insertSignal(db, signal) {
 }
 
 export async function runGnewsCron(db) {
+  const cfg = await getConfig(db);
+  const segments = cfg.collectors.gnews_segments;
+
   let total = 0;
-  for (const [segment, config] of Object.entries(SEGMENTS)) {
+  for (const [segment, config] of Object.entries(segments)) {
     for (const query of config.queries) {
       try {
         const items = await fetchFeed(query);

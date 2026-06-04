@@ -1,27 +1,28 @@
-// Shared LLM caller — tries Groq first (fast, free tier), falls back to OpenRouter.
+import { getConfig } from "./config.js";
+
+const PROVIDERS = {
+  groq:       { url: "https://api.groq.com/openai/v1/chat/completions" },
+  openrouter: { url: "https://openrouter.ai/api/v1/chat/completions" },
+};
+
 export async function callLLM(prompt, env, { maxTokens = 800 } = {}) {
-  if (env.GROQ_API_KEY) {
+  const cfg = await getConfig(env.DB);
+  const llm = cfg.llm;
+
+  const key = (p) => p === "groq" ? env.GROQ_API_KEY : env.OPENROUTER_API_KEY;
+
+  const primary = PROVIDERS[llm.primary_provider];
+  if (primary && key(llm.primary_provider)) {
     try {
-      return await _call(
-        "https://api.groq.com/openai/v1/chat/completions",
-        env.GROQ_API_KEY,
-        "llama-3.1-8b-instant",
-        prompt,
-        maxTokens,
-      );
+      return await _call(primary.url, key(llm.primary_provider), llm.primary_model, prompt, maxTokens);
     } catch (e) {
-      console.error("Groq failed, falling back to OpenRouter:", e.message);
+      console.error(`${llm.primary_provider} failed, falling back:`, e.message);
     }
   }
 
-  if (env.OPENROUTER_API_KEY) {
-    return await _call(
-      "https://openrouter.ai/api/v1/chat/completions",
-      env.OPENROUTER_API_KEY,
-      "anthropic/claude-haiku-4-5",
-      prompt,
-      maxTokens,
-    );
+  const fallback = PROVIDERS[llm.fallback_provider];
+  if (fallback && key(llm.fallback_provider)) {
+    return await _call(fallback.url, key(llm.fallback_provider), llm.fallback_model, prompt, maxTokens);
   }
 
   throw new Error("No LLM key available (GROQ_API_KEY or OPENROUTER_API_KEY required)");

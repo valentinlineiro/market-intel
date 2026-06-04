@@ -1,20 +1,4 @@
-/**
- * local_news.js — configurable local newspaper RSS collector
- * Called from the scheduled handler in index.js.
- * Active location is set via env.LOCAL_NEWS_LOCATION (wrangler.toml [vars]).
- */
-
-const LOCATIONS = {
-  "Cádiz": [
-    "https://www.diariodecadiz.es/rss/",
-    "https://www.europasur.es/rss/",
-    "https://www.lavozdigital.es/rss/2.0/",
-  ],
-  // To add a new location:
-  // "Sevilla": [
-  //   "https://www.diariodesevilla.es/rss/2.0/",
-  // ],
-};
+import { getConfig } from "../config.js";
 
 const PAIN_KEYWORDS = [
   "problema", "queja", "multa", "burocracia", "retraso", "lento", "caro",
@@ -78,10 +62,13 @@ async function insertSignal(db, signal) {
 }
 
 export async function runLocalNewsCron(env) {
-  const location = env.LOCAL_NEWS_LOCATION;
-  const feeds = LOCATIONS[location];
-  if (!feeds) {
-    console.warn(`local_news: no feeds configured for location "${location}" — skipping`);
+  const cfg = await getConfig(env.DB);
+  const ln = cfg.collectors.local_news;
+  const feeds = ln.feeds;
+  const location = ln.location;
+
+  if (!feeds || !feeds.length) {
+    console.warn(`local_news: no feeds configured for "${location}" — skipping`);
     return;
   }
 

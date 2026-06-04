@@ -122,16 +122,16 @@ describe("applyRules", () => {
 
 describe("shouldAlert", () => {
   it("returns true when never alerted", () => {
-    expect(shouldAlert({ telegram_alerted_at: null })).toBe(true);
+    expect(shouldAlert({ alerted_at: null })).toBe(true);
   });
 
   it("returns false when alerted less than 24h ago", () => {
     const recent = new Date(Date.now() - 12 * 3600000).toISOString();
-    expect(shouldAlert({ telegram_alerted_at: recent })).toBe(false);
+    expect(shouldAlert({ alerted_at: recent })).toBe(false);
   });
 
   it("returns true when alerted more than 24h ago", () => {
     const old = new Date(Date.now() - 25 * 3600000).toISOString();
-    expect(shouldAlert({ telegram_alerted_at: old })).toBe(true);
+    expect(shouldAlert({ alerted_at: old })).toBe(true);
   });
 });

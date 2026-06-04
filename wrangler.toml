@@ -13,5 +13,5 @@ database_name = "market-intel"
 database_id = "101dd684-e2df-4edf-97ea-f92be920d1e1"
 
 # ── Variables de entorno (secrets) ───────────────────────────────────────
-# wrangler pages secret put TELEGRAM_TOKEN
-# wrangler pages secret put TELEGRAM_CHAT_ID
+# wrangler pages secret put NOTIFICATION_EMAIL_RECIPIENT
+# wrangler pages secret put NOTIFICATION_EMAIL_FROM

@@ -1,24 +1,5 @@
-// src/main/infrastructure/worker/discover.js
-
-const HN_QUERIES = [
-  "solo practitioner software pain billing",
-  "freelancer professional bureaucracy",
-  "small practice management software problem",
-  "professional license permit Spain problem",
-];
-
-const NEWS_QUERIES = [
-  "autónomo España software problema hacienda",
-  "profesional liberal burocracia queja",
-  "pyme software gestión problema España",
-];
-
-const KNOWN_SEGMENTS = [
-  "Odontólogo / Clínica dental",
-  "Docente universitario",
-  "Abogado autónomo",
-  "Arquitecto",
-];
+import { callLLM } from "./llm.js";
+import { getConfig } from "./config.js";
 
 const CLUSTER_PROMPT = `Analiza estos textos de noticias y foros profesionales.
 Identifica perfiles profesionales con dolores recurrentes NO incluidos en: {known}.
@@ -31,27 +12,29 @@ Para cada perfil nuevo devuelve JSON:
 
 Devuelve SOLO un array JSON válido. Si no hay perfiles nuevos devuelve [].`;
 
-import { callLLM } from "./llm.js";
-
 export async function runDiscovery(env, limit = 60) {
-  const texts = await collectBroad(limit);
+  const cfg = await getConfig(env.DB);
+  const disc = cfg.discover;
+
+  const texts = await collectBroad(disc, limit);
   if (!texts.length) return [];
 
   const allClusters = [];
-  const toProcess = texts.slice(0, 30); // cost cap: max 2 LLM batches
-  for (let i = 0; i < toProcess.length; i += 15) {
-    const batch = toProcess.slice(i, i + 15);
-    const clusters = await clusterBatch(batch, env);
+  const toProcess = texts.slice(0, disc.text_limit);
+  const batchSize = disc.batch_size || 15;
+  for (let i = 0; i < toProcess.length; i += batchSize) {
+    const batch = toProcess.slice(i, i + batchSize);
+    const clusters = await clusterBatch(batch, disc.known_segments, env);
     allClusters.push(...clusters);
   }
 
   return aggregate(allClusters);
 }
 
-async function collectBroad(limit) {
+async function collectBroad(disc, limit) {
   const texts = [];
 
-  for (const query of HN_QUERIES) {
+  for (const query of disc.hn_queries) {
     if (texts.length >= limit) break;
     try {
       const url = `https://hn.algolia.com/api/v1/search?query=${encodeURIComponent(query)}&tags=story,ask_hn&hitsPerPage=12`;
@@ -68,7 +51,7 @@ async function collectBroad(limit) {
     }
   }
 
-  for (const query of NEWS_QUERIES) {
+  for (const query of disc.news_queries) {
     if (texts.length >= limit) break;
     try {
       const url = `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=es&gl=ES&ceid=ES:es`;
@@ -76,7 +59,7 @@ async function collectBroad(limit) {
       if (!res.ok) continue;
       const text = await res.text();
       const matches = [...text.matchAll(/<title><!\[CDATA\[([^\]]+)\]\]><\/title>|<title>([^<]+)<\/title>/g)];
-      for (const m of matches.slice(1, 11)) { // skip feed title
+      for (const m of matches.slice(1, 11)) {
         const title = (m[1] || m[2] || "").trim();
         if (title) texts.push(title);
       }
@@ -88,9 +71,9 @@ async function collectBroad(limit) {
   return texts.slice(0, limit);
 }
 
-async function clusterBatch(texts, env) {
+async function clusterBatch(texts, knownSegments, env) {
   const prompt = CLUSTER_PROMPT
-    .replace("{known}", KNOWN_SEGMENTS.join(", "))
+    .replace("{known}", knownSegments.join(", "))
     .replace("{posts}", texts.map((t, i) => `${i + 1}. ${t}`).join("\n"));
 
   try {

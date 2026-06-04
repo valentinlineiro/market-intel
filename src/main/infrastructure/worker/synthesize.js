@@ -1,3 +1,6 @@
+import { callLLM } from "./llm.js";
+import { getConfig } from "./config.js";
+
 const SYNTHESIS_PROMPT = `Eres un copywriter B2B especializado en SaaS para profesionales autónomos españoles.
 
 Tu tarea: escribir el copy de una landing page de validación usando ÚNICAMENTE el lenguaje que aparece en las quejas reales que te doy. Nada de marketing genérico.
@@ -18,17 +21,9 @@ REGLAS:
 Devuelve ÚNICAMENTE JSON válido, sin texto previo ni backticks:
 {"headline":"...","subtitle":"...","benefits":[{"title":"...","desc":"...","emoji":"..."},{"title":"...","desc":"...","emoji":"..."},{"title":"...","desc":"...","emoji":"..."}],"cta":"..."}`;
 
-const SEGMENTS = {
-  dentista:              { label: "Odontólogo / Clínica dental", keywords: ["Verifactu", "gestión clínica", "seguros"],  salary_mean: 65000 },
-  docente_universitario: { label: "Docente universitario",       keywords: ["ANECA", "sexenios", "burocracia"],          salary_mean: 42000 },
-  abogado_autonomo:      { label: "Abogado autónomo",            keywords: ["LexNet", "IVA", "expedientes"],             salary_mean: 48000 },
-  arquitecto:            { label: "Arquitecto",                  keywords: ["visado", "presupuestos", "certificados"],   salary_mean: 44000 },
-};
-
-import { callLLM } from "./llm.js";
-
 export async function synthesizeCopy(segment, env) {
-  const seg = SEGMENTS[segment] || { label: segment, keywords: [], salary_mean: "N/A" };
+  const cfg = await getConfig(env.DB);
+  const seg = cfg.synthesis_segments[segment] || { label: segment, keywords: [], salary_mean: "N/A" };
   const prompt = SYNTHESIS_PROMPT
     .replace("{segment_label}", seg.label)
     .replace("{top_keywords}", seg.keywords.join(", "))

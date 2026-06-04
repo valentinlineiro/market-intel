@@ -1,12 +1,13 @@
 /**
  * functions/signup.js — Cloudflare Pages Function
  *
- * Recibe POST /signup, guarda lead en D1 y notifica Telegram.
+ * Recibe POST /signup, guarda lead en D1 y notifica por email.
  *
- * Bindings requeridos (wrangler.toml + wrangler pages secret put):
- *   DB               — D1 database binding
- *   TELEGRAM_TOKEN   — secret
- *   TELEGRAM_CHAT_ID — secret
+ * Bindings requeridos:
+ *   DB                        — D1 database binding
+ *   EMAIL                     — send_email binding
+ *   NOTIFICATION_EMAIL_FROM   — dirección from (dominio verificado)
+ *   NOTIFICATION_EMAIL_RECIPIENT — destinatario de notificaciones
  */
 
 const CORS = {
@@ -53,20 +54,15 @@ export async function onRequestPost({ request, env }) {
       ).run();
     }
 
-    // Notificar Telegram
-    if (env.TELEGRAM_TOKEN && env.TELEGRAM_CHAT_ID) {
-      await fetch(
-        `https://api.telegram.org/bot${env.TELEGRAM_TOKEN}/sendMessage`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            chat_id:    env.TELEGRAM_CHAT_ID,
-            text:       `✉️ *Nuevo lead*\n*Segmento:* ${segment}\n*Email:* \`${email}\``,
-            parse_mode: "Markdown",
-          }),
-        }
-      ).catch(e => console.error("Telegram:", e.message));
+    // Notificar por email
+    if (env.EMAIL && env.NOTIFICATION_EMAIL_RECIPIENT && env.NOTIFICATION_EMAIL_FROM) {
+      env.EMAIL.send({
+        to: env.NOTIFICATION_EMAIL_RECIPIENT,
+        from: { email: env.NOTIFICATION_EMAIL_FROM, name: "Market Intel" },
+        subject: `Nuevo lead: ${segment}`,
+        html: `<h2>Nuevo lead</h2><p><strong>Segmento:</strong> ${segment}</p><p><strong>Email:</strong> ${email}</p>`,
+        text: `Nuevo lead\nSegmento: ${segment}\nEmail: ${email}`,
+      }).catch(e => console.error("Email:", e.message));
     }
 
     return json({ status: "ok" }, 200);

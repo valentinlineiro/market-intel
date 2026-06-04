@@ -91,6 +91,17 @@
       <tbody id="leads-body"><tr><td colspan="3" class="loading">Cargando...</td></tr></tbody>
     </table>
   </div>
+
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-top:32px;">
+    <h2 style="margin:0;">Configuración</h2>
+    <button id="settings-toggle" onclick="toggleSettings()"
+      style="padding:6px 14px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:6px;font-size:0.75rem;cursor:pointer;">
+      Mostrar
+    </button>
+  </div>
+  <div id="settings-panel" class="card" style="display:none;margin-top:16px;">
+    <p class="loading">Cargando configuración...</p>
+  </div>
 </div>
 
 <script>
@@ -246,6 +257,88 @@
     } catch (e) {
       btn.textContent = `Error: ${e.message}`;
       setTimeout(() => { btn.textContent = "Descubrir ahora"; btn.disabled = false; }, 3000);
+    }
+  }
+
+  // ── Settings ───────────────────────────────────────────────────────────
+  let settingsOpen = false;
+
+  async function toggleSettings() {
+    settingsOpen = !settingsOpen;
+    const panel = document.getElementById("settings-panel");
+    const btn   = document.getElementById("settings-toggle");
+    if (!settingsOpen) {
+      panel.style.display = "none";
+      btn.textContent = "Mostrar";
+      return;
+    }
+    panel.style.display = "block";
+    btn.textContent = "Ocultar";
+    panel.innerHTML = '<p class="loading">Cargando configuración...</p>';
+    try {
+      const res = await fetch(`${WORKER}/public/config`);
+      if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+      const { config } = await res.json();
+      renderConfigForm(config);
+    } catch (e) {
+      panel.innerHTML = `<p class="error">Error: ${esc(e.message)}</p>`;
+    }
+  }
+
+  function renderConfigForm(config) {
+    window._rawConfig = config;
+    const sections = [
+      { key: "score", label: "Scoring", desc: "Pesos y umbrales del sistema de puntuación" },
+      { key: "llm", label: "LLM", desc: "Modelos y proveedores" },
+      { key: "discover", label: "Descubrimiento", desc: "Límites y queries de exploración" },
+      { key: "notifications", label: "Notificaciones", desc: "Email de destino para alertas (from y recipient)" },
+    ];
+
+    let html = '<div style="display:flex;flex-direction:column;gap:16px;">';
+    for (const s of sections) {
+      const val = config[s.key] || {};
+      html += `<div style="background:#020817;border:1px solid #1e293b;border-radius:8px;padding:16px;">
+        <div style="font-size:0.85rem;font-weight:600;color:#f1f5f9;margin-bottom:2px;">${esc(s.label)}</div>
+        <div style="font-size:0.7rem;color:#475569;margin-bottom:10px;">${esc(s.desc)}</div>
+        <textarea id="cfg-${s.key}" rows="6"
+          style="width:100%;padding:10px;background:#0f172a;border:1px solid #1e293b;border-radius:6px;color:#94a3b8;font-family:monospace;font-size:0.78rem;resize:vertical;white-space:pre;overflow-x:auto;">${esc(JSON.stringify(val, null, 2))}</textarea>
+      </div>`;
+    }
+    html += `<button onclick="saveConfig()"
+      style="padding:10px 20px;background:#3b82f6;color:white;border:none;border-radius:8px;font-weight:600;cursor:pointer;width:100%;">
+      Guardar configuración
+    </button>
+    <div id="config-status" style="font-size:0.8rem;color:#475569;min-height:1.2em;"></div>`;
+    html += "</div>";
+    document.getElementById("settings-panel").innerHTML = html;
+  }
+
+  async function saveConfig() {
+    const btn = document.querySelector("#settings-panel button");
+    const status = document.getElementById("config-status");
+    btn.disabled = true;
+    status.textContent = "Guardando...";
+    try {
+      const full = {};
+      for (const section of ["score", "llm", "discover", "notifications"]) {
+        const raw = document.getElementById(`cfg-${section}`).value;
+        full[section] = JSON.parse(raw);
+      }
+      // Merge unchanged top-level keys
+      full.collectors = window._rawConfig?.collectors || {};
+      full.synthesis_segments = window._rawConfig?.synthesis_segments || {};
+
+      const res = await fetch(`/api/config`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(full),
+      });
+      if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+      status.innerHTML = '<span style="color:#34d399;">✓ Configuración guardada</span>';
+    } catch (e) {
+      status.innerHTML = `<span style="color:#f87171;">Error: ${esc(e.message)}</span>`;
+    } finally {
+      btn.disabled = false;
     }
   }
 

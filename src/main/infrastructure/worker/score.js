@@ -1,4 +1,5 @@
-import { sendTelegram } from "./notify.js";
+import { sendEmail } from "./notify.js";
+import { getConfig } from "./config.js";
 
 export const SCORE_WEIGHTS = {
   dolor: 0.30,
@@ -15,8 +16,8 @@ export const ALERT_SCORE_THRESHOLD = 7.0;
 const SALARY_TIERS = { high: 10, medium_high: 7, medium: 5, low: 2 };
 const DEFAULT_COMPETENCIA_SCORE = 5.0;
 
-export function computeOpportunityScore(breakdown) {
-  const raw = Object.entries(SCORE_WEIGHTS).reduce(
+export function computeOpportunityScore(breakdown, weights = SCORE_WEIGHTS) {
+  const raw = Object.entries(weights).reduce(
     (sum, [k, w]) => sum + (breakdown[k] ?? 0) * w, 0
   );
   return Math.round(raw * 100) / 100;
@@ -65,38 +66,49 @@ export function dolorScore(signals) {
   return [dolor, summary];
 }
 
-export function applyRules(opp) {
+export function applyRules(opp, killThreshold = KILL_SCORE_THRESHOLD, scaleThreshold = SCALE_SCORE_THRESHOLD) {
   if (opp.status === "killed" || opp.status === "scaling") return opp;
   const ageDays = (Date.now() - new Date(opp.first_seen).getTime()) / 86400000;
-  if ((opp.signal_count ?? 0) === 0 && ageDays >= (opp.kill_threshold_days ?? 7) && opp.score < KILL_SCORE_THRESHOLD) {
+  if ((opp.signal_count ?? 0) === 0 && ageDays >= (opp.kill_threshold_days ?? 7) && opp.score < killThreshold) {
     return { ...opp, status: "killed" };
   }
-  if (opp.score >= SCALE_SCORE_THRESHOLD && (opp.emails_captured ?? 0) >= (opp.scale_threshold_emails ?? 30)) {
+  if (opp.score >= scaleThreshold && (opp.emails_captured ?? 0) >= (opp.scale_threshold_emails ?? 30)) {
     return { ...opp, status: "scaling" };
   }
   return opp;
 }
 
 export function shouldAlert(opp) {
-  if (!opp.telegram_alerted_at) return true;
-  return (Date.now() - new Date(opp.telegram_alerted_at).getTime()) > 86400000;
+  if (!opp.alerted_at) return true;
+  return (Date.now() - new Date(opp.alerted_at).getTime()) > 86400000;
 }
 
 export function formatAlert(opp, seg) {
   const bd = opp.score_breakdown ?? {};
   const lines = [
-    `🎯 *Oportunidad detectada*`,
-    `*Segmento:* ${seg.label}`,
-    `*Score:* ${opp.score}/10`,
-    `*Dolor:* ${(bd.dolor ?? 0).toFixed(1)} | *Pago:* ${(bd.capacidad_pago ?? 0).toFixed(0)} | *Urgencia:* ${(bd.urgencia ?? 0).toFixed(0)}`,
-    `*Señales:* ${opp.signal_count}`,
-    `*Resumen:* ${opp.pain_summary}`,
+    `Oportunidad detectada — ${seg.label}`,
+    `Score: ${opp.score}/10`,
+    `Dolor: ${(bd.dolor ?? 0).toFixed(1)} | Pago: ${(bd.capacidad_pago ?? 0).toFixed(0)} | Urgencia: ${(bd.urgencia ?? 0).toFixed(0)}`,
+    `Señales: ${opp.signal_count}`,
+    `Resumen: ${opp.pain_summary}`,
   ];
-  if (seg.has_deadline) lines.push("⚠️ Deadline activo");
-  return lines.join("\n");
+  if (seg.has_deadline) lines.push("Deadline activo");
+  const text = lines.join("\n");
+  const htmlLines = [
+    `<h2>Oportunidad detectada — ${seg.label}</h2>`,
+    `<p><strong>Score:</strong> ${opp.score}/10</p>`,
+    `<p><strong>Dolor:</strong> ${(bd.dolor ?? 0).toFixed(1)} | <strong>Pago:</strong> ${(bd.capacidad_pago ?? 0).toFixed(0)} | <strong>Urgencia:</strong> ${(bd.urgencia ?? 0).toFixed(0)}</p>`,
+    `<p><strong>Señales:</strong> ${opp.signal_count}</p>`,
+    `<p><strong>Resumen:</strong> ${opp.pain_summary}</p>`,
+  ];
+  if (seg.has_deadline) htmlLines.push("<p><strong>Deadline activo</strong></p>");
+  return { text, html: htmlLines.join("\n") };
 }
 
 export async function runScore(env, topN = 10, minScore = 1.0, dryRun = false) {
+  const cfg = await getConfig(env.DB);
+  const sw = cfg.score;
+
   const activeSegments = await _buildActiveSegments(env, topN, minScore);
   const results = [];
 
@@ -113,10 +125,10 @@ export async function runScore(env, topN = 10, minScore = 1.0, dryRun = false) {
       dolor,
       capacidad_pago: incomeTierScore(seg.income_tier),
       volumen: volumeScore(seg.discovery_score),
-      competencia: DEFAULT_COMPETENCIA_SCORE,
+      competencia: sw.default_competencia_score,
       urgencia: urgencyScore(seg.has_deadline),
     };
-    const score = computeOpportunityScore(breakdown);
+    const score = computeOpportunityScore(breakdown, sw.weights);
 
     const existing = await env.DB.prepare(
       "SELECT * FROM opportunities WHERE segment = ? LIMIT 1"
@@ -136,19 +148,19 @@ export async function runScore(env, topN = 10, minScore = 1.0, dryRun = false) {
       status: existing?.status ?? "watching",
       landing_url: existing?.landing_url ?? null,
       emails_captured: existing?.emails_captured ?? 0,
-      kill_threshold_days: 7,
-      scale_threshold_emails: 30,
-      telegram_alerted_at: existing?.telegram_alerted_at ?? null,
+      kill_threshold_days: sw.kill_days,
+      scale_threshold_emails: sw.scale_emails,
+      alerted_at: existing?.alerted_at ?? null,
     };
 
-    const finalOpp = applyRules(opp);
+    const finalOpp = applyRules(opp, sw.kill_score_threshold, sw.scale_score_threshold);
 
     if (!dryRun) {
       await env.DB.prepare(`
         INSERT INTO opportunities
           (id, segment, pain_summary, score, score_breakdown, signal_ids,
            signal_count, first_seen, last_updated, status, landing_url,
-           emails_captured, validation_deadline, telegram_alerted_at)
+           emails_captured, validation_deadline, alerted_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           pain_summary=excluded.pain_summary, score=excluded.score,
@@ -157,21 +169,22 @@ export async function runScore(env, topN = 10, minScore = 1.0, dryRun = false) {
           last_updated=excluded.last_updated, status=excluded.status,
           emails_captured=excluded.emails_captured, landing_url=excluded.landing_url,
           validation_deadline=excluded.validation_deadline,
-          telegram_alerted_at=excluded.telegram_alerted_at
+          alerted_at=excluded.alerted_at
       `).bind(
         finalOpp.id, finalOpp.segment, finalOpp.pain_summary ?? null, finalOpp.score,
         JSON.stringify(finalOpp.score_breakdown), JSON.stringify(finalOpp.signal_ids),
         finalOpp.signal_count, finalOpp.first_seen, finalOpp.last_updated,
         finalOpp.status, finalOpp.landing_url ?? null, finalOpp.emails_captured ?? 0,
-        null, finalOpp.telegram_alerted_at ?? null,
+        null, finalOpp.alerted_at ?? null,
       ).run();
 
-      if (finalOpp.score >= ALERT_SCORE_THRESHOLD && finalOpp.status === "watching" && shouldAlert(finalOpp)) {
-        const msg = formatAlert(finalOpp, seg);
-        const sent = await sendTelegram(env, msg);
+      if (finalOpp.score >= sw.alert_score_threshold && finalOpp.status === "watching" && shouldAlert(finalOpp)) {
+        const { text, html } = formatAlert(finalOpp, seg);
+        const subject = `Oportunidad detectada: ${seg.label} (${finalOpp.score}/10)`;
+        const sent = await sendEmail(env, subject, html, text);
         if (sent) {
           await env.DB.prepare(
-            "UPDATE opportunities SET telegram_alerted_at = ? WHERE id = ?"
+            "UPDATE opportunities SET alerted_at = ? WHERE id = ?"
           ).bind(now, finalOpp.id).run();
         }
       }

@@ -1,16 +1,18 @@
-// notify.js
-export async function sendTelegram(env, message) {
-  if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_CHAT_ID) return false;
+import { getConfig } from "./config.js";
+
+export async function sendEmail(env, subject, html, text) {
+  const cfg = await getConfig(env.DB);
+  const { from, recipient } = cfg.notifications;
+  if (!env.EMAIL || !recipient || !from) return false;
   try {
-    const res = await fetch(
-      `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chat_id: env.TELEGRAM_CHAT_ID, text: message, parse_mode: "Markdown" }),
-      }
-    );
-    return res.ok;
+    await env.EMAIL.send({
+      to: recipient,
+      from: { email: from, name: "Market Intel" },
+      subject,
+      html,
+      text,
+    });
+    return true;
   } catch {
     return false;
   }

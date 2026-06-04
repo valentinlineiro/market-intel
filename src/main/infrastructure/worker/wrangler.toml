@@ -11,7 +11,7 @@ migrations_dir = "migrations"
 [triggers]
 crons = ["0 */12 * * *"]
 
-# wrangler secret put WORKER_SECRET
+[[send_email]]
+binding = "EMAIL"
 
-[vars]
-LOCAL_NEWS_LOCATION = "Cádiz"
+# wrangler secret put WORKER_SECRET

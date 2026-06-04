@@ -28,7 +28,8 @@ import { runLocalNewsCron } from "./collectors/local_news.js";
 import { synthesizeCopy, buildHtml } from "./synthesize.js";
 import { runDiscovery } from "./discover.js";
 import { runScore } from "./score.js";
-import { sendTelegram } from "./notify.js";
+import { sendEmail } from "./notify.js";
+import { getConfig, setConfig, invalidateCache } from "./config.js";
 
 const CORS = {
   "Access-Control-Allow-Origin":  "*",
@@ -46,11 +47,12 @@ export default {
     const method = request.method;
 
     // ── Public read-only routes (no auth required for dashboard) ──────────
-    if (method === "GET" && (path === "/public/stats" || path === "/public/opportunities" || path === "/public/leads" || path === "/public/discovery")) {
+    if ((method === "GET" && (path === "/public/stats" || path === "/public/opportunities" || path === "/public/leads" || path === "/public/discovery" || path === "/public/config"))) {
       try {
         if (path === "/public/stats")         return await getStats(env.DB);
         if (path === "/public/leads")         return await getLeads(env.DB, url.searchParams);
         if (path === "/public/discovery")     return await getDiscovery(env.DB);
+        if (path === "/public/config")        return await getConfigHandler(env.DB);
         return await getOpportunities(env.DB, url.searchParams);
       } catch (err) {
         return json({ error: err.message }, 500);
@@ -83,6 +85,18 @@ export default {
 
       if (path === "/stats" && method === "GET")
         return await getStats(env.DB);
+
+      if (path === "/config" && method === "GET")
+        return await getConfigHandler(env.DB);
+
+      if (path === "/config" && method === "PUT") {
+        const body = await request.json();
+        if (!body || typeof body !== "object")
+          return json({ error: "invalid config" }, 400);
+        await setConfig(env.DB, body);
+        invalidateCache();
+        return json({ status: "ok" });
+      }
 
       if (path === "/synthesize" && method === "POST") {
         const { segment } = await request.json();
@@ -157,12 +171,14 @@ export default {
           ))
         );
         const top5 = candidates.slice(0, 5);
-        if (top5.length && env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID) {
-          const lines = ["🔍 *Segmentos ocultos detectados*\n"];
+        if (top5.length) {
+          const textLines = ["Segmentos ocultos detectados\n"];
+          const htmlLines = ["<h2>Segmentos ocultos detectados</h2>"];
           for (const [i, c] of top5.entries()) {
-            lines.push(`*${i + 1}. ${c.profile}*\n  Dolor: ${c.pain}\n  Score: ${c.discovery_score}\n`);
+            textLines.push(`${i + 1}. ${c.profile} — Dolor: ${c.pain} — Score: ${c.discovery_score}`);
+            htmlLines.push(`<p><strong>${i + 1}. ${c.profile}</strong><br>Dolor: ${c.pain}<br>Score: ${c.discovery_score}</p>`);
           }
-          await sendTelegram(env, lines.join("\n"));
+          await sendEmail(env, "Segmentos ocultos detectados", htmlLines.join("\n"), textLines.join("\n"));
         }
         return json({ run_id, candidates });
       }
@@ -251,7 +267,7 @@ async function upsertOpportunity(db, o) {
     INSERT INTO opportunities
     (id, segment, pain_summary, score, score_breakdown, signal_ids,
      signal_count, first_seen, last_updated, status, landing_url,
-     emails_captured, validation_deadline, telegram_alerted_at)
+     emails_captured, validation_deadline, alerted_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       score=excluded.score, score_breakdown=excluded.score_breakdown,
@@ -259,14 +275,14 @@ async function upsertOpportunity(db, o) {
       last_updated=excluded.last_updated, status=excluded.status,
       emails_captured=excluded.emails_captured, landing_url=excluded.landing_url,
       validation_deadline=excluded.validation_deadline,
-      telegram_alerted_at=excluded.telegram_alerted_at
+      alerted_at=excluded.alerted_at
   `).bind(
     o.id, o.segment, o.pain_summary ?? null, o.score,
     typeof o.score_breakdown === "string" ? o.score_breakdown : JSON.stringify(o.score_breakdown ?? {}),
     typeof o.signal_ids === "string" ? o.signal_ids : JSON.stringify(o.signal_ids ?? []),
     o.signal_count ?? 0, o.first_seen, o.last_updated,
     o.status ?? "watching", o.landing_url ?? null, o.emails_captured ?? 0,
-    o.validation_deadline ?? null, o.telegram_alerted_at ?? null,
+    o.validation_deadline ?? null, o.alerted_at ?? null,
   ).run();
   return json({ upserted: true });
 }
@@ -323,6 +339,11 @@ async function getLeads(db, params) {
     bySegment[r.segment].push({ email: r.email, captured_at: r.captured_at });
   }
   return json({ total: (results ?? []).length, by_segment: bySegment });
+}
+
+async function getConfigHandler(db) {
+  const cfg = await getConfig(db);
+  return json({ config: cfg });
 }
 
 function json(body, status = 200) {
