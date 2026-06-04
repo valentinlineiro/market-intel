@@ -1,0 +1,68 @@
+export type SignalSource = 'gnews' | 'local_news';
+export type OpportunityStatus = 'watching' | 'testing' | 'scaling' | 'killed';
+
+export interface ScoreBreakdown {
+  dolor: number;
+  capacidad_pago: number;
+  volumen: number;
+  competencia: number;
+  urgencia: number;
+}
+
+export interface Opportunity {
+  id: string;
+  segment: string;
+  pain_summary: string;
+  score: number;
+  score_breakdown: ScoreBreakdown;
+  signal_count: number;
+  status: OpportunityStatus;
+  landing_url: string | null;
+  emails_captured: number;
+  last_updated: string;
+}
+
+export interface DiscoveryCandidate {
+  profile: string;
+  pain: string;
+  keywords: string[];
+  post_count: number;
+  discovery_score: number;
+  income_est: string | null;
+  has_deadline: boolean;
+}
+
+export interface Lead {
+  email: string;
+  segment: string;
+  captured_at: string;
+}
+
+export interface Stats {
+  total_signals: number;
+  total_opportunities: number;
+  by_segment: Record<string, number>;
+  top_opportunity: { score: number; pain_summary: string } | null;
+}
+
+export interface DiscoveryResult {
+  run_id: string | null;
+  candidates: DiscoveryCandidate[];
+  discovered_at: string | null;
+}
+
+export interface Config {
+  score: Record<string, unknown>;
+  llm: Record<string, unknown>;
+  discover: Record<string, unknown>;
+  notifications: Record<string, unknown>;
+  collectors?: Record<string, unknown>;
+  synthesis_segments?: Record<string, unknown>;
+}
+
+export interface LandingCopy {
+  title: string;
+  subtitle: string;
+  benefits: [string, string, string][];
+  cta: string;
+}
