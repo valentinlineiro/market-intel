@@ -2,8 +2,8 @@ import { redirect } from '@sveltejs/kit';
 import type { Handle } from '@sveltejs/kit';
 import { validateSession } from '$lib/auth.js';
 
-const PUBLIC_PATHS = new Set(['/login']);
-const PUBLIC_PREFIXES = ['/landings/', '/api/signup'];
+const PUBLIC_PATHS = new Set(['/login', '/api/signup']);
+const PUBLIC_PREFIXES = ['/landings/'];
 
 export const handle: Handle = async ({ event, resolve }) => {
   const path = event.url.pathname;

@@ -13,9 +13,14 @@ function workerFetch(url: string, env: App.Platform['env'], init?: RequestInit):
   });
 }
 
+async function safeJson<T>(res: Response, fallback: T): Promise<T> {
+  if (!res.ok) return fallback;
+  try { return await res.json() as T; } catch { return fallback; }
+}
+
 export const load: PageServerLoad = async ({ platform }) => {
   const env  = (platform as App.Platform).env;
-  const base = env.WORKER_URL;
+  const base = env.WORKER_URL.replace(/\/$/, '');
 
   const [statsRes, oppsRes, leadsRes, discoveryRes, configRes] = await Promise.all([
     fetch(`${base}/public/stats`),
@@ -26,11 +31,11 @@ export const load: PageServerLoad = async ({ platform }) => {
   ]);
 
   const [statsData, oppsData, leadsData, discoveryData, configData] = await Promise.all([
-    statsRes.json() as Promise<Stats>,
-    oppsRes.json() as Promise<{ results: Opportunity[] }>,
-    leadsRes.json() as Promise<{ total: number; by_segment: Record<string, { email: string; captured_at: string }[]> }>,
-    discoveryRes.json() as Promise<DiscoveryResult>,
-    configRes.json() as Promise<{ config: Config }>,
+    safeJson<Stats>(statsRes, { total_signals: 0, total_opportunities: 0, total_leads: 0, top_segment: null }),
+    safeJson<{ results: Opportunity[] }>(oppsRes, { results: [] }),
+    safeJson<{ total: number; by_segment: Record<string, { email: string; captured_at: string }[]> }>(leadsRes, { total: 0, by_segment: {} }),
+    safeJson<DiscoveryResult>(discoveryRes, { candidates: [], discovered_at: null }),
+    safeJson<{ config: Config }>(configRes, { config: {} as Config }),
   ]);
 
   return {
@@ -45,7 +50,7 @@ export const load: PageServerLoad = async ({ platform }) => {
 export const actions: Actions = {
   discover: async ({ platform }) => {
     const env = (platform as App.Platform).env;
-    const res = await workerFetch(`${env.WORKER_URL}/discover`, env, { method: 'POST', body: '{}' });
+    const res = await workerFetch(`${env.WORKER_URL.replace(/\/$/, '')}/discover`, env, { method: 'POST', body: '{}' });
     if (!res.ok) return { success: false, error: `${res.status}` };
     const data = await res.json() as { run_id: string; candidates: unknown[] };
     return { success: true, count: data.candidates?.length ?? 0 };
@@ -56,7 +61,7 @@ export const actions: Actions = {
     const formData = await request.formData();
     const segment  = formData.get('segment') as string;
     const copy     = JSON.parse(formData.get('copy') as string);
-    const res = await workerFetch(`${env.WORKER_URL}/deploy`, env, {
+    const res = await workerFetch(`${env.WORKER_URL.replace(/\/$/, '')}/deploy`, env, {
       method: 'POST',
       body: JSON.stringify({ segment, copy }),
     });
@@ -69,7 +74,7 @@ export const actions: Actions = {
     const env    = (platform as App.Platform).env;
     const formData = await request.formData();
     const config = JSON.parse(formData.get('config') as string) as Config;
-    const res = await workerFetch(`${env.WORKER_URL}/config`, env, {
+    const res = await workerFetch(`${env.WORKER_URL.replace(/\/$/, '')}/config`, env, {
       method: 'PUT',
       body: JSON.stringify(config),
     });

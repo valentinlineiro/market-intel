@@ -16,17 +16,22 @@
   async function runDiscovery() {
     discovering = true;
     discoverStatus = 'Explorando...';
-    const fd = new FormData();
-    const res = await fetch('?/discover', { method: 'POST', body: fd });
-    const result = await res.json() as { success: boolean; count?: number };
-    if (result.success) {
-      discoverStatus = `✓ ${result.count ?? 0} sectores encontrados`;
-      await invalidateAll();
-    } else {
+    try {
+      const fd  = new FormData();
+      const res = await fetch('?/discover', { method: 'POST', body: fd });
+      const result = await res.json() as { success: boolean; count?: number };
+      if (result.success) {
+        discoverStatus = `✓ ${result.count ?? 0} sectores encontrados`;
+        await invalidateAll();
+      } else {
+        discoverStatus = 'Error al descubrir';
+      }
+    } catch {
       discoverStatus = 'Error al descubrir';
+    } finally {
+      discovering = false;
+      setTimeout(() => { discoverStatus = ''; }, 3000);
     }
-    discovering = false;
-    setTimeout(() => { discoverStatus = ''; }, 3000);
   }
 </script>
 
