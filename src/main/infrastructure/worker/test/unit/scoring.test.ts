@@ -1,0 +1,317 @@
+import { describe, it, expect } from "vitest";
+import {
+  computeOpportunityScore,
+  dolorScore,
+  incomeTierScore,
+  urgencyScore,
+  volumeScore,
+  applyRules,
+  shouldAlert,
+} from "../../domain/scoring.js";
+import {
+  KILL_SCORE_THRESHOLD,
+  SCALE_SCORE_THRESHOLD,
+  ALERT_SCORE_THRESHOLD,
+  SCORE_WEIGHTS,
+} from "../../domain/rules.js";
+import type { Signal, Opportunity } from "../../domain/types.js";
+
+// ---------------------------------------------------------------------------
+// computeOpportunityScore
+// ---------------------------------------------------------------------------
+
+describe("computeOpportunityScore", () => {
+  it("returns 0 for empty breakdown (all fields default to 0)", () => {
+    const result = computeOpportunityScore({
+      dolor: 0,
+      capacidad_pago: 0,
+      volumen: 0,
+      competencia: 0,
+      urgencia: 0,
+    });
+    expect(result).toBe(0);
+  });
+
+  it("applies weights correctly: all 10s yields 10", () => {
+    const breakdown = {
+      dolor: 10,
+      capacidad_pago: 10,
+      volumen: 10,
+      competencia: 10,
+      urgencia: 10,
+    };
+    // sum of weights = 0.35+0.25+0.20+0.10+0.10 = 1.0, so 10*1.0 = 10
+    expect(computeOpportunityScore(breakdown)).toBe(10);
+  });
+
+  it("weighs dolor at 0.35", () => {
+    const breakdown = {
+      dolor: 10,
+      capacidad_pago: 0,
+      volumen: 0,
+      competencia: 0,
+      urgencia: 0,
+    };
+    expect(computeOpportunityScore(breakdown)).toBe(
+      Math.round(10 * SCORE_WEIGHTS.dolor * 100) / 100
+    );
+  });
+
+  it("rounds to 2 decimal places", () => {
+    const breakdown = {
+      dolor: 1,
+      capacidad_pago: 1,
+      volumen: 1,
+      competencia: 1,
+      urgencia: 1,
+    };
+    const result = computeOpportunityScore(breakdown);
+    expect(result).toBe(1); // 1 * (0.35+0.25+0.20+0.10+0.10) = 1.00
+  });
+});
+
+// ---------------------------------------------------------------------------
+// dolorScore
+// ---------------------------------------------------------------------------
+
+describe("dolorScore", () => {
+  it("returns 0 for empty signals array", () => {
+    const [score, summary] = dolorScore([]);
+    expect(score).toBe(0);
+    expect(summary).toBe("");
+  });
+
+  it("returns 0 for signals older than 30 days", () => {
+    const old = new Date(Date.now() - 31 * 86400000).toISOString();
+    const signal: Signal = {
+      id: "s1",
+      source: "gnews",
+      collected_at: old,
+      segment: "test",
+      location: null,
+      raw_text: "old text",
+      url: "http://example.com",
+      pain_keywords: ["pain"],
+      sentiment_score: null,
+      salary_mean: null,
+      income_tier: null,
+      signal_strength: 0.8,
+      has_deadline: false,
+    };
+    const [score] = dolorScore([signal]);
+    expect(score).toBe(0);
+  });
+
+  it("returns score > 0 for recent signals", () => {
+    const now = new Date().toISOString();
+    const signals: Signal[] = Array.from({ length: 10 }, (_, i) => ({
+      id: `s${i}`,
+      source: "gnews" as const,
+      collected_at: now,
+      segment: "test",
+      location: null,
+      raw_text: "text",
+      url: "http://example.com",
+      pain_keywords: ["burocracia", "multa"],
+      sentiment_score: null,
+      salary_mean: null,
+      income_tier: null,
+      signal_strength: 0.8,
+      has_deadline: false,
+    }));
+    const [score, summary] = dolorScore(signals);
+    expect(score).toBeGreaterThan(0);
+    expect(summary).toMatch(/burocracia|multa|señales/);
+  });
+
+  it("never exceeds 10", () => {
+    const now = new Date().toISOString();
+    const signals: Signal[] = Array.from({ length: 100 }, (_, i) => ({
+      id: `s${i}`,
+      source: "gnews" as const,
+      collected_at: now,
+      segment: "test",
+      location: null,
+      raw_text: "text",
+      url: "http://example.com",
+      pain_keywords: ["pain"],
+      sentiment_score: null,
+      salary_mean: null,
+      income_tier: null,
+      signal_strength: 1.0,
+      has_deadline: false,
+    }));
+    const [score] = dolorScore(signals);
+    expect(score).toBeLessThanOrEqual(10);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// incomeTierScore
+// ---------------------------------------------------------------------------
+
+describe("incomeTierScore", () => {
+  it("returns correct value for high", () => expect(incomeTierScore("high")).toBe(10));
+  it("returns correct value for medium_high", () => expect(incomeTierScore("medium_high")).toBe(7));
+  it("returns correct value for medium", () => expect(incomeTierScore("medium")).toBe(5));
+  it("returns correct value for low", () => expect(incomeTierScore("low")).toBe(2));
+  it("returns fallback for unknown tier", () => expect(incomeTierScore("unknown")).toBe(2));
+  it("returns fallback for null", () => expect(incomeTierScore(null)).toBe(2));
+});
+
+// ---------------------------------------------------------------------------
+// urgencyScore
+// ---------------------------------------------------------------------------
+
+describe("urgencyScore", () => {
+  it("returns 10 when has deadline", () => expect(urgencyScore(true)).toBe(10));
+  it("returns 0 when no deadline", () => expect(urgencyScore(false)).toBe(0));
+});
+
+// ---------------------------------------------------------------------------
+// volumeScore
+// ---------------------------------------------------------------------------
+
+describe("volumeScore", () => {
+  it("caps at 10", () => expect(volumeScore(999)).toBe(10));
+  it("normalises: discovery_score 20 → 10", () => expect(volumeScore(20)).toBe(10));
+  it("normalises: discovery_score 10 → 5", () => expect(volumeScore(10)).toBe(5));
+  it("returns 0 for 0", () => expect(volumeScore(0)).toBe(0));
+});
+
+// ---------------------------------------------------------------------------
+// applyRules
+// ---------------------------------------------------------------------------
+
+describe("applyRules", () => {
+  const baseOpp: Opportunity = {
+    id: "abc",
+    segment: "test",
+    pain_summary: "",
+    score: 6.0,
+    score_breakdown: { dolor: 6, capacidad_pago: 6, volumen: 6, competencia: 6, urgencia: 6 },
+    signal_ids: [],
+    signal_count: 5,
+    first_seen: new Date().toISOString(),
+    last_updated: new Date().toISOString(),
+    status: "watching",
+    landing_url: null,
+    emails_captured: 0,
+    validation_deadline: null,
+    telegram_alerted_at: null,
+  };
+
+  it("does not change an already-killed opportunity", () => {
+    const opp: Opportunity = { ...baseOpp, status: "killed" };
+    expect(applyRules(opp).status).toBe("killed");
+  });
+
+  it("does not change an already-scaling opportunity", () => {
+    const opp: Opportunity = { ...baseOpp, status: "scaling" };
+    expect(applyRules(opp).status).toBe("scaling");
+  });
+
+  it("kills opp with no signals after threshold days and low score", () => {
+    const old = new Date(Date.now() - 10 * 86400000).toISOString();
+    const opp: Opportunity = {
+      ...baseOpp,
+      signal_count: 0,
+      score: KILL_SCORE_THRESHOLD - 0.1,
+      first_seen: old,
+    };
+    expect(applyRules(opp).status).toBe("killed");
+  });
+
+  it("does not kill if score is at or above kill threshold", () => {
+    const old = new Date(Date.now() - 10 * 86400000).toISOString();
+    const opp: Opportunity = {
+      ...baseOpp,
+      signal_count: 0,
+      score: KILL_SCORE_THRESHOLD + 1,
+      first_seen: old,
+    };
+    expect(applyRules(opp).status).toBe("watching");
+  });
+
+  it("scales opp with high score and enough emails", () => {
+    const opp: Opportunity = {
+      ...baseOpp,
+      score: SCALE_SCORE_THRESHOLD + 0.1,
+      emails_captured: 30,
+    };
+    expect(applyRules(opp).status).toBe("scaling");
+  });
+
+  it("keeps watching status when conditions not met", () => {
+    expect(applyRules(baseOpp).status).toBe("watching");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// shouldAlert
+// ---------------------------------------------------------------------------
+
+describe("shouldAlert", () => {
+  it("returns true when telegram_alerted_at is null", () => {
+    const opp: Opportunity = {
+      id: "x",
+      segment: "s",
+      pain_summary: "",
+      score: ALERT_SCORE_THRESHOLD + 1,
+      score_breakdown: { dolor: 8, capacidad_pago: 8, volumen: 8, competencia: 8, urgencia: 8 },
+      signal_ids: [],
+      signal_count: 0,
+      first_seen: new Date().toISOString(),
+      last_updated: new Date().toISOString(),
+      status: "watching",
+      landing_url: null,
+      emails_captured: 0,
+      validation_deadline: null,
+      telegram_alerted_at: null,
+    };
+    expect(shouldAlert(opp)).toBe(true);
+  });
+
+  it("returns false when already alerted (telegram_alerted_at is set)", () => {
+    const opp: Opportunity = {
+      id: "x",
+      segment: "s",
+      pain_summary: "",
+      score: ALERT_SCORE_THRESHOLD + 1,
+      score_breakdown: { dolor: 8, capacidad_pago: 8, volumen: 8, competencia: 8, urgencia: 8 },
+      signal_ids: [],
+      signal_count: 0,
+      first_seen: new Date().toISOString(),
+      last_updated: new Date().toISOString(),
+      status: "watching",
+      landing_url: null,
+      emails_captured: 0,
+      validation_deadline: null,
+      telegram_alerted_at: new Date().toISOString(),
+    };
+    expect(shouldAlert(opp)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Constants exported from rules.ts
+// ---------------------------------------------------------------------------
+
+describe("rules constants", () => {
+  it("SCORE_WEIGHTS sum to 1.0", () => {
+    const sum = Object.values(SCORE_WEIGHTS).reduce((a, b) => a + b, 0);
+    expect(Math.round(sum * 100) / 100).toBe(1.0);
+  });
+
+  it("KILL_SCORE_THRESHOLD is a positive number", () => {
+    expect(KILL_SCORE_THRESHOLD).toBeGreaterThan(0);
+  });
+
+  it("SCALE_SCORE_THRESHOLD > KILL_SCORE_THRESHOLD", () => {
+    expect(SCALE_SCORE_THRESHOLD).toBeGreaterThan(KILL_SCORE_THRESHOLD);
+  });
+
+  it("ALERT_SCORE_THRESHOLD is a positive number", () => {
+    expect(ALERT_SCORE_THRESHOLD).toBeGreaterThan(0);
+  });
+});
