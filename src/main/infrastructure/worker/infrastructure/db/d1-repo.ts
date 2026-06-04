@@ -252,10 +252,10 @@ export class D1Repo implements ISignalRepo, IOpportunityRepo, ILeadRepo, IDiscov
 
   // ── IDiscoveryRepo ───────────────────────────────────────────────────────
 
-  async saveCandidates(candidates: DiscoveryCandidate[]): Promise<void> {
+  async saveCandidates(candidates: DiscoveryCandidate[], run_id?: string): Promise<void> {
     if (!candidates.length) return;
 
-    const run_id = new Date().toISOString();
+    const effectiveRunId = run_id ?? new Date().toISOString();
     const stmt = this.db.prepare(`
       INSERT INTO discovery_candidates
         (profile, pain, keywords, source_urls, post_count, discovery_score, income_est,
@@ -268,15 +268,15 @@ export class D1Repo implements ISignalRepo, IOpportunityRepo, ILeadRepo, IDiscov
         stmt.bind(
           c.segment,
           c.pain_summary,
-          JSON.stringify([]),
+          JSON.stringify(c.raw_signals ?? []),
           JSON.stringify(c.source_urls ?? []),
           c.raw_signals?.length ?? 0,
           c.discovery_score ?? 0,
           null,
           0,
           'discovery',
-          run_id,
-          c.discovered_at ?? run_id,
+          effectiveRunId,
+          c.discovered_at ?? effectiveRunId,
         ),
       ),
     );

@@ -180,11 +180,11 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env) => {
     }
 
     if (path === '/deploy' && method === 'POST') {
-      const { segment, copy } = await request.json() as { segment?: string; copy?: { title?: string } & Record<string, unknown> };
+      const { segment, copy } = await request.json() as { segment?: string; copy?: { headline?: string } & Record<string, unknown> };
       if (!segment || !copy) return json({ error: 'segment and copy required' }, 400);
       const html = buildHtml(segment, copy as unknown as Parameters<typeof buildHtml>[1]);
       const now  = new Date().toISOString();
-      const title = typeof copy.title === 'string' ? copy.title : segment;
+      const title = typeof copy.headline === 'string' ? copy.headline : segment;
       const d1repo = new D1Repo(env.DB);
       await d1repo.saveLanding(segment, html, title);
       const landingUrl = `https://market-intel.pages.dev/landings/${segment}`;
@@ -234,9 +234,8 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env) => {
 
       if (!candidates.length) return json({ run_id: null, candidates: [] });
 
-      await d1repo.saveCandidates(candidates);
-
-      const run_id = new Date().toISOString();
+      const run_id = crypto.randomUUID();
+      await d1repo.saveCandidates(candidates, run_id);
       return json({ run_id, candidates });
     }
 
