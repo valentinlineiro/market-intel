@@ -7,6 +7,7 @@ import {
   volumeScore,
   applyRules,
   shouldAlert,
+  formatAlert,
 } from "../../domain/scoring.js";
 import {
   KILL_SCORE_THRESHOLD,
@@ -14,7 +15,7 @@ import {
   ALERT_SCORE_THRESHOLD,
   SCORE_WEIGHTS,
 } from "../../domain/rules.js";
-import type { Signal, Opportunity } from "../../domain/types.js";
+import type { Signal, Opportunity, SegmentConfig } from "../../domain/types.js";
 
 // ---------------------------------------------------------------------------
 // computeOpportunityScore
@@ -290,6 +291,108 @@ describe("shouldAlert", () => {
       telegram_alerted_at: new Date().toISOString(),
     };
     expect(shouldAlert(opp)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// formatAlert
+// ---------------------------------------------------------------------------
+
+describe("formatAlert", () => {
+  const baseOpp: Opportunity = {
+    id: "opp1",
+    segment: "test_segment",
+    pain_summary: "Test pain summary",
+    score: 7.5,
+    score_breakdown: { dolor: 8, capacidad_pago: 7, volumen: 6, competencia: 5, urgencia: 9 },
+    signal_ids: ["s1", "s2"],
+    signal_count: 2,
+    first_seen: new Date().toISOString(),
+    last_updated: new Date().toISOString(),
+    status: "watching",
+    landing_url: null,
+    emails_captured: 5,
+    validation_deadline: null,
+    telegram_alerted_at: null,
+  };
+
+  const baseSegment: SegmentConfig = {
+    key: "test_segment",
+    label: "Test Segment Label",
+    keywords: ["test"],
+    income_tier: "high",
+    has_deadline: false,
+    discovery_score: 10,
+  };
+
+  it("returns an object with subject, html, and text fields", () => {
+    const result = formatAlert(baseOpp, baseSegment);
+    expect(result).toHaveProperty("subject");
+    expect(result).toHaveProperty("html");
+    expect(result).toHaveProperty("text");
+  });
+
+  it("subject contains the segment label", () => {
+    const result = formatAlert(baseOpp, baseSegment);
+    expect(result.subject).toContain("Test Segment Label");
+  });
+
+  it("subject contains the opportunity score", () => {
+    const result = formatAlert(baseOpp, baseSegment);
+    expect(result.subject).toContain("7.5/10");
+  });
+
+  it("html is a non-empty string", () => {
+    const result = formatAlert(baseOpp, baseSegment);
+    expect(typeof result.html).toBe("string");
+    expect(result.html.length).toBeGreaterThan(0);
+  });
+
+  it("text is a non-empty string", () => {
+    const result = formatAlert(baseOpp, baseSegment);
+    expect(typeof result.text).toBe("string");
+    expect(result.text.length).toBeGreaterThan(0);
+  });
+
+  it("html contains HTML tags", () => {
+    const result = formatAlert(baseOpp, baseSegment);
+    expect(result.html).toMatch(/<h2>|<p>|<\/p>|<\/h2>/);
+  });
+
+  it("text does not contain HTML tags", () => {
+    const result = formatAlert(baseOpp, baseSegment);
+    expect(result.text).not.toMatch(/<[^>]+>/);
+  });
+
+  it("includes pain summary in both formats", () => {
+    const result = formatAlert(baseOpp, baseSegment);
+    expect(result.html).toContain("Test pain summary");
+    expect(result.text).toContain("Test pain summary");
+  });
+
+  it("includes signal count in both formats", () => {
+    const result = formatAlert(baseOpp, baseSegment);
+    expect(result.html).toContain("2");
+    expect(result.text).toContain("2");
+  });
+
+  it("includes deadline note when segment has_deadline is true", () => {
+    const segmentWithDeadline: SegmentConfig = { ...baseSegment, has_deadline: true };
+    const result = formatAlert(baseOpp, segmentWithDeadline);
+    expect(result.html).toContain("Deadline activo");
+    expect(result.text).toContain("Deadline activo");
+  });
+
+  it("does not include deadline note when segment has_deadline is false", () => {
+    const result = formatAlert(baseOpp, baseSegment);
+    expect(result.html).not.toContain("Deadline activo");
+    expect(result.text).not.toContain("Deadline activo");
+  });
+
+  it("includes score breakdown values in both formats", () => {
+    const result = formatAlert(baseOpp, baseSegment);
+    expect(result.html).toContain("8"); // dolor
+    expect(result.text).toContain("8");
   });
 });
 
