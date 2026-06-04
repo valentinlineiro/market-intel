@@ -1,5 +1,5 @@
 name = "market-intel-api"
-main = "index.js"
+main = "index.ts"
 compatibility_date = "2026-01-01"
 
 [[d1_databases]]

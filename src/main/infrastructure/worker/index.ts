@@ -1,0 +1,512 @@
+/**
+ * infrastructure/worker/index.ts
+ *
+ * Composition root, HTTP router, and cron handler for the Worker.
+ *
+ * Authenticated routes:
+ *   GET    /signals?segment=X&limit=N
+ *   POST   /signals
+ *   GET    /signals/count?segment=X
+ *   GET    /opportunities?status=X
+ *   POST   /opportunities
+ *   GET    /stats
+ *   GET    /health
+ *   GET    /config
+ *   PUT    /config
+ *   POST   /synthesize
+ *   POST   /deploy
+ *   POST   /discovery/candidates
+ *   POST   /discover
+ *   POST   /score
+ *
+ * Public routes (no auth required):
+ *   GET    /public/stats
+ *   GET    /public/opportunities
+ *   GET    /public/leads
+ *   GET    /public/discovery
+ *   GET    /public/config
+ *   GET    /public/landings/:segment
+ *   POST   /public/signup
+ */
+
+import { getConfig, setConfig, invalidateCache } from './infrastructure/config.js';
+import { D1Repo } from './infrastructure/db/d1-repo.js';
+import { LLMChain } from './infrastructure/llm/chain.js';
+import { EmailNotifier } from './infrastructure/notify.js';
+import { collectGnews } from './infrastructure/collectors/gnews.js';
+import { collectLocalNews } from './infrastructure/collectors/local_news.js';
+import { runCollect } from './application/collect.js';
+import { runScore } from './application/score.js';
+import { runDiscovery } from './application/discover.js';
+import { synthesizeCopy, buildHtml } from './application/synthesize.js';
+
+// ---------------------------------------------------------------------------
+// Env interface
+// ---------------------------------------------------------------------------
+
+export interface Env {
+  DB: D1Database;
+  WORKER_SECRET: string;
+  GROQ_API_KEY?: string;
+  OPENROUTER_API_KEY?: string;
+  EMAIL?: {
+    send(message: {
+      to: string;
+      from: { email: string; name?: string };
+      subject: string;
+      html?: string;
+      text?: string;
+    }): Promise<void>;
+  };
+}
+
+// ---------------------------------------------------------------------------
+// CORS headers
+// ---------------------------------------------------------------------------
+
+const CORS = {
+  'Access-Control-Allow-Origin':  '*',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+};
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function json(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...CORS, 'Content-Type': 'application/json' },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Fetch handler
+// ---------------------------------------------------------------------------
+
+const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env) => {
+  if (request.method === 'OPTIONS')
+    return new Response(null, { status: 204, headers: CORS });
+
+  const url    = new URL(request.url);
+  const path   = url.pathname.replace(/\/$/, '');
+  const method = request.method;
+
+  // ── Public routes (no auth required) ──────────────────────────────────────
+  const isPublicGet = method === 'GET' && (
+    path === '/public/stats' ||
+    path === '/public/opportunities' ||
+    path === '/public/leads' ||
+    path === '/public/discovery' ||
+    path === '/public/config' ||
+    path.startsWith('/public/landings/')
+  );
+  const isPublicPost = method === 'POST' && path === '/public/signup';
+
+  if (isPublicGet || isPublicPost) {
+    try {
+      const d1repo = new D1Repo(env.DB);
+
+      if (path === '/public/stats')         return await handleGetStats(d1repo);
+      if (path === '/public/leads')         return await handleGetLeads(d1repo, url.searchParams);
+      if (path === '/public/discovery')     return await handleGetDiscovery(d1repo);
+      if (path === '/public/config')        return await handleGetConfig(env.DB);
+      if (path === '/public/opportunities') return await handleGetOpportunities(env.DB, url.searchParams);
+
+      if (path.startsWith('/public/landings/')) {
+        const segment = path.slice('/public/landings/'.length);
+        const html = await d1repo.getLandingHtml(segment);
+        if (!html) return new Response('Not Found', { status: 404 });
+        return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html' } });
+      }
+
+      if (path === '/public/signup' && method === 'POST') {
+        const body = await request.json() as { email?: string; segment?: string };
+        if (!body.email || !body.segment)
+          return json({ error: 'email and segment required' }, 400);
+        await d1repo.saveLead(body.email, body.segment);
+        return json({ ok: true });
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return json({ error: msg }, 500);
+    }
+  }
+
+  // ── Auth ───────────────────────────────────────────────────────────────────
+  const auth = request.headers.get('Authorization') ?? '';
+  if (!auth.startsWith('Bearer ') || auth.slice(7) !== env.WORKER_SECRET)
+    return json({ error: 'unauthorized' }, 401);
+
+  try {
+    if (path === '/health' && method === 'GET')
+      return json({ status: 'ok', ts: new Date().toISOString() });
+
+    if (path === '/signals' && method === 'GET')
+      return await handleGetSignals(env.DB, url.searchParams);
+
+    if (path === '/signals' && method === 'POST')
+      return await handleInsertSignal(env.DB, await request.json() as Record<string, unknown>);
+
+    if (path === '/signals/count' && method === 'GET')
+      return await handleCountSignals(env.DB, url.searchParams);
+
+    if (path === '/opportunities' && method === 'GET')
+      return await handleGetOpportunities(env.DB, url.searchParams);
+
+    if (path === '/opportunities' && method === 'POST')
+      return await handleUpsertOpportunity(env.DB, await request.json() as Record<string, unknown>);
+
+    if (path === '/stats' && method === 'GET')
+      return await handleGetStats(new D1Repo(env.DB));
+
+    if (path === '/config' && method === 'GET')
+      return await handleGetConfig(env.DB);
+
+    if (path === '/config' && method === 'PUT') {
+      const body = await request.json() as unknown;
+      if (!body || typeof body !== 'object' || Array.isArray(body))
+        return json({ error: 'invalid config' }, 400);
+      await setConfig(env.DB, body as Record<string, unknown>);
+      invalidateCache();
+      return json({ status: 'ok' });
+    }
+
+    if (path === '/synthesize' && method === 'POST') {
+      const { segment } = await request.json() as { segment?: string };
+      if (!segment) return json({ error: 'segment required' }, 400);
+      if (!env.GROQ_API_KEY && !env.OPENROUTER_API_KEY)
+        return json({ error: 'No LLM key configured (GROQ_API_KEY or OPENROUTER_API_KEY required)' }, 503);
+      const cfg = await getConfig(env.DB);
+      const segmentConfig = cfg.synthesis_segments[segment];
+      if (!segmentConfig) return json({ error: `segment '${segment}' not found in synthesis_segments` }, 404);
+      const llm = new LLMChain(cfg.llm, env.GROQ_API_KEY, env.OPENROUTER_API_KEY);
+      const copy = await synthesizeCopy(segment, segmentConfig, llm);
+      return json({ segment, copy });
+    }
+
+    if (path === '/deploy' && method === 'POST') {
+      const { segment, copy } = await request.json() as { segment?: string; copy?: { title?: string } & Record<string, unknown> };
+      if (!segment || !copy) return json({ error: 'segment and copy required' }, 400);
+      const html = buildHtml(segment, copy as unknown as Parameters<typeof buildHtml>[1]);
+      const now  = new Date().toISOString();
+      const title = typeof copy.title === 'string' ? copy.title : segment;
+      const d1repo = new D1Repo(env.DB);
+      await d1repo.saveLanding(segment, html, title);
+      const landingUrl = `https://market-intel.pages.dev/landings/${segment}`;
+      await env.DB.prepare(
+        `UPDATE opportunities SET landing_url = ?, status = 'testing', last_updated = ?
+         WHERE segment = ?`
+      ).bind(landingUrl, now, segment).run();
+      return json({ url: landingUrl });
+    }
+
+    if (path === '/discovery/candidates' && method === 'POST') {
+      const { run_id, candidates } = await request.json() as {
+        run_id?: string;
+        candidates?: Array<{
+          profile?: string;
+          pain?: string;
+          keywords?: string[];
+          post_count?: number;
+          discovery_score?: number;
+          income_est?: string | null;
+          has_deadline?: boolean;
+          source?: string;
+        }>;
+      };
+      if (!run_id || !Array.isArray(candidates) || !candidates.length)
+        return json({ error: 'run_id and non-empty candidates required' }, 400);
+      const invalid = candidates.filter(c => !c.profile || !c.pain);
+      if (invalid.length)
+        return json({ error: `${invalid.length} candidate(s) missing required profile/pain fields` }, 400);
+      const now = new Date().toISOString();
+      const stmt = env.DB.prepare(
+        `INSERT INTO discovery_candidates
+         (profile, pain, keywords, post_count, discovery_score, income_est, has_deadline, source, run_id, discovered_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      );
+      await env.DB.batch(
+        candidates.map(c => stmt.bind(
+          c.profile, c.pain,
+          JSON.stringify(c.keywords ?? []),
+          c.post_count ?? 0, c.discovery_score ?? 0,
+          c.income_est ?? null, c.has_deadline ? 1 : 0,
+          c.source ?? 'reddit', run_id, now
+        ))
+      );
+      return json({ saved: candidates.length });
+    }
+
+    if (path === '/discover' && method === 'POST') {
+      if (!env.GROQ_API_KEY && !env.OPENROUTER_API_KEY)
+        return json({ error: 'No LLM key configured (GROQ_API_KEY or OPENROUTER_API_KEY required)' }, 503);
+
+      const cfg = await getConfig(env.DB);
+      const llm = new LLMChain(cfg.llm, env.GROQ_API_KEY, env.OPENROUTER_API_KEY);
+      const notifier = new EmailNotifier(env.EMAIL!, cfg.notifications);
+
+      // Fetch raw texts from HN Algolia and Google News RSS
+      const texts = await collectDiscoveryTexts();
+      const d1repo = new D1Repo(env.DB);
+      const latestCandidates = await d1repo.getLatestCandidates();
+      const knownSegments = latestCandidates?.candidates.map(c => c.segment) ?? [];
+
+      const candidates = await runDiscovery(llm, notifier, cfg.discover, texts, knownSegments);
+
+      if (!candidates.length) return json({ run_id: null, candidates: [] });
+
+      await d1repo.saveCandidates(candidates);
+
+      const run_id = new Date().toISOString();
+      return json({ run_id, candidates });
+    }
+
+    if (path === '/score' && method === 'POST') {
+      const body = await request.json().catch(() => ({})) as {
+        top_n?: number;
+        min_score?: number;
+        dry_run?: boolean;
+      };
+      const cfg = await getConfig(env.DB);
+      const d1repo = new D1Repo(env.DB);
+      const llm = new LLMChain(cfg.llm, env.GROQ_API_KEY, env.OPENROUTER_API_KEY);
+      const notifier = new EmailNotifier(env.EMAIL!, cfg.notifications);
+      const results = await runScore(
+        { signals: d1repo, opportunities: d1repo, discovery: d1repo },
+        notifier,
+        body.top_n ?? cfg.score.top_n,
+        body.min_score ?? cfg.score.min_score,
+        body.dry_run ?? cfg.score.dry_run,
+      );
+      return json({ results });
+    }
+
+    return json({ error: 'not found' }, 404);
+
+  } catch (err) {
+    console.error(path, err);
+    const msg = err instanceof Error ? err.message : String(err);
+    return json({ error: msg }, 500);
+  }
+};
+
+// ---------------------------------------------------------------------------
+// Cron handler
+// ---------------------------------------------------------------------------
+
+const scheduled: ExportedHandlerScheduledHandler<Env> = async (_event, env, ctx) => {
+  ctx.waitUntil((async () => {
+    const cfg = await getConfig(env.DB);
+    const d1repo = new D1Repo(env.DB);
+    const llm = new LLMChain(cfg.llm, env.GROQ_API_KEY, env.OPENROUTER_API_KEY);
+    const notifier = new EmailNotifier(env.EMAIL!, cfg.notifications);
+
+    // Collect
+    const gnewsCollector = () => collectGnews(cfg.collectors.gnews.segments, env.GROQ_API_KEY ?? '');
+    const localNewsCollector = () => collectLocalNews(cfg.collectors.local_news);
+    await runCollect(d1repo, [gnewsCollector, localNewsCollector]);
+
+    // Score
+    await runScore(
+      { signals: d1repo, opportunities: d1repo, discovery: d1repo },
+      notifier,
+      cfg.score.top_n,
+      cfg.score.min_score,
+      cfg.score.dry_run,
+    );
+  })());
+};
+
+// ---------------------------------------------------------------------------
+// Default export
+// ---------------------------------------------------------------------------
+
+export default { fetch: handleFetch, scheduled } satisfies ExportedHandler<Env>;
+
+// ---------------------------------------------------------------------------
+// Route handler helpers
+// ---------------------------------------------------------------------------
+
+async function handleGetSignals(db: D1Database, params: URLSearchParams): Promise<Response> {
+  const segment = params.get('segment');
+  const limit   = Math.min(parseInt(params.get('limit') ?? '100'), 500);
+  const { results } = segment
+    ? await db.prepare('SELECT * FROM signals WHERE segment = ? ORDER BY collected_at DESC LIMIT ?').bind(segment, limit).all()
+    : await db.prepare('SELECT * FROM signals ORDER BY collected_at DESC LIMIT ?').bind(limit).all();
+  return json({ results });
+}
+
+async function handleInsertSignal(db: D1Database, signal: Record<string, unknown>): Promise<Response> {
+  const existing = await db.prepare(
+    'SELECT 1 FROM signals WHERE url = ? AND segment = ? LIMIT 1'
+  ).bind(signal['url'], signal['segment']).first();
+  if (existing) return json({ inserted: false, reason: 'duplicate' });
+
+  await db.prepare(`
+    INSERT INTO signals
+    (id, source, collected_at, segment, location, raw_text, url,
+     pain_keywords, sentiment_score, salary_mean, income_tier,
+     signal_strength, has_deadline)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(
+    signal['id'], signal['source'], signal['collected_at'], signal['segment'],
+    signal['location'] ?? null,
+    (typeof signal['raw_text'] === 'string' ? signal['raw_text'] : '').slice(0, 2000),
+    signal['url'],
+    JSON.stringify(Array.isArray(signal['pain_keywords']) ? signal['pain_keywords'] : []),
+    signal['sentiment_score'] ?? null, signal['salary_mean'] ?? null,
+    signal['income_tier'] ?? null, signal['signal_strength'] ?? null,
+    signal['has_deadline'] ? 1 : 0,
+  ).run();
+  return json({ inserted: true });
+}
+
+async function handleCountSignals(db: D1Database, params: URLSearchParams): Promise<Response> {
+  const segment = params.get('segment');
+  const row = segment
+    ? await db.prepare('SELECT COUNT(*) as n FROM signals WHERE segment = ?').bind(segment).first<Record<string, unknown>>()
+    : await db.prepare('SELECT COUNT(*) as n FROM signals').first<Record<string, unknown>>();
+  return json({ count: row?.['n'] ?? 0 });
+}
+
+async function handleGetOpportunities(db: D1Database, params: URLSearchParams): Promise<Response> {
+  const status = params.get('status');
+  const { results } = status
+    ? await db.prepare('SELECT * FROM opportunities WHERE status = ? ORDER BY score DESC').bind(status).all()
+    : await db.prepare('SELECT * FROM opportunities ORDER BY score DESC').all();
+  return json({ results });
+}
+
+async function handleUpsertOpportunity(db: D1Database, o: Record<string, unknown>): Promise<Response> {
+  await db.prepare(`
+    INSERT INTO opportunities
+    (id, segment, pain_summary, score, score_breakdown, signal_ids,
+     signal_count, first_seen, last_updated, status, landing_url,
+     emails_captured, validation_deadline, alerted_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      score=excluded.score, score_breakdown=excluded.score_breakdown,
+      signal_ids=excluded.signal_ids, signal_count=excluded.signal_count,
+      last_updated=excluded.last_updated, status=excluded.status,
+      emails_captured=excluded.emails_captured, landing_url=excluded.landing_url,
+      validation_deadline=excluded.validation_deadline,
+      alerted_at=excluded.alerted_at
+  `).bind(
+    o['id'], o['segment'], o['pain_summary'] ?? null, o['score'],
+    typeof o['score_breakdown'] === 'string' ? o['score_breakdown'] : JSON.stringify(o['score_breakdown'] ?? {}),
+    typeof o['signal_ids'] === 'string' ? o['signal_ids'] : JSON.stringify(Array.isArray(o['signal_ids']) ? o['signal_ids'] : []),
+    o['signal_count'] ?? 0, o['first_seen'], o['last_updated'],
+    o['status'] ?? 'watching', o['landing_url'] ?? null, o['emails_captured'] ?? 0,
+    o['validation_deadline'] ?? null, o['alerted_at'] ?? null,
+  ).run();
+  return json({ upserted: true });
+}
+
+async function handleGetStats(d1repo: D1Repo): Promise<Response> {
+  const stats = await d1repo.getStats();
+  // Also get by-segment breakdown and top opportunity for parity with the old JS handler
+  const db = (d1repo as unknown as { db: D1Database })['db'];
+  const [bySegRows, topRow] = await Promise.all([
+    db.prepare('SELECT segment, COUNT(*) as n FROM signals GROUP BY segment').all<Record<string, unknown>>(),
+    db.prepare('SELECT score, pain_summary FROM opportunities ORDER BY score DESC LIMIT 1').first<Record<string, unknown>>(),
+  ]);
+  const by_segment: Record<string, unknown> = {};
+  for (const r of bySegRows.results ?? []) by_segment[r['segment'] as string] = r['n'];
+  return json({
+    total_signals:       stats.signals,
+    total_opportunities: stats.opportunities,
+    by_segment,
+    top_opportunity: topRow ?? null,
+    backend: 'worker+d1',
+  });
+}
+
+async function handleGetDiscovery(d1repo: D1Repo): Promise<Response> {
+  const latest = await d1repo.getLatestCandidates();
+  if (!latest) return json({ run_id: null, candidates: [], discovered_at: null });
+  const candidates = latest.candidates.map(c => ({
+    profile:         c.segment,
+    pain:            c.pain_summary,
+    keywords:        c.raw_signals,
+    post_count:      0,
+    discovery_score: c.discovery_score,
+    income_est:      null,
+    has_deadline:    false,
+  }));
+  return json({ run_id: null, candidates, discovered_at: latest.discovered_at });
+}
+
+async function handleGetLeads(d1repo: D1Repo, params: URLSearchParams): Promise<Response> {
+  const segment = params.get('segment') ?? undefined;
+  const leads = await d1repo.getLeads(segment);
+  const bySegment: Record<string, Array<{ email: string; captured_at: string }>> = {};
+  for (const r of leads) {
+    if (!bySegment[r.segment]) bySegment[r.segment] = [];
+    bySegment[r.segment].push({ email: r.email, captured_at: r.created_at });
+  }
+  return json({ total: leads.length, by_segment: bySegment });
+}
+
+async function handleGetConfig(db: D1Database): Promise<Response> {
+  const cfg = await getConfig(db);
+  return json({ config: cfg });
+}
+
+// ---------------------------------------------------------------------------
+// Discovery text fetching (HN Algolia + Google News RSS)
+// ---------------------------------------------------------------------------
+
+async function collectDiscoveryTexts(limit = 60): Promise<string[]> {
+  const texts: string[] = [];
+
+  const hnQueries = [
+    'freelancer pain problem',
+    'professional software problem',
+    'pequeña empresa problema gestión',
+    'autónomo problema hacienda',
+  ];
+
+  const newsQueries = [
+    'autónomos problema España',
+    'profesionales freelance queja',
+    'pyme gestión problema',
+  ];
+
+  for (const query of hnQueries) {
+    if (texts.length >= limit) break;
+    try {
+      const url = `https://hn.algolia.com/api/v1/search?query=${encodeURIComponent(query)}&tags=story,ask_hn&hitsPerPage=12`;
+      const res = await fetch(url, { headers: { 'User-Agent': 'market-intel/0.1' } });
+      if (!res.ok) continue;
+      const data = await res.json() as { hits?: Array<{ title?: string; story_text?: string }> };
+      for (const hit of data.hits ?? []) {
+        const title = (hit.title ?? '').trim();
+        const body  = (hit.story_text ?? '').slice(0, 200).trim();
+        if (title) texts.push(body ? `${title} — ${body}` : title);
+      }
+    } catch (e) {
+      console.error(`HN broad '${query}':`, e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  for (const query of newsQueries) {
+    if (texts.length >= limit) break;
+    try {
+      const url = `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=es&gl=ES&ceid=ES:es`;
+      const res = await fetch(url, { headers: { 'User-Agent': 'market-intel/0.1' } });
+      if (!res.ok) continue;
+      const text = await res.text();
+      const matches = [...text.matchAll(/<title><!\[CDATA\[([^\]]+)\]\]><\/title>|<title>([^<]+)<\/title>/g)];
+      for (const m of matches.slice(1, 11)) {
+        const title = ((m[1] ?? m[2] ?? '') as string).trim();
+        if (title) texts.push(title);
+      }
+    } catch (e) {
+      console.error(`News RSS '${query}':`, e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  return texts.slice(0, limit);
+}
