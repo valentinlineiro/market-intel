@@ -95,8 +95,25 @@ jobs:
           workingDirectory: src/main/infrastructure/worker
           command:          deploy
 
+  build-pages:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install pages deps
+        run: npm ci
+        working-directory: src/main/infrastructure/pages
+
+      - name: Build SvelteKit
+        run: npm run build
+        working-directory: src/main/infrastructure/pages
+
   deploy-pages:
-    needs: [changes, migrate]
+    needs: [changes, migrate, build-pages]
     if: |
       always() &&
       !failure() &&
