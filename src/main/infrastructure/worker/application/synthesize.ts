@@ -50,7 +50,14 @@ export async function synthesizeCopy(
     if (raw.startsWith('json')) raw = raw.slice(4).trim();
   }
 
-  const parsed = JSON.parse(raw) as {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error(`LLM returned invalid JSON for synthesis of segment '${segment}': ${raw.slice(0, 200)}`);
+  }
+
+  const typedParsed = parsed as {
     headline?: string;
     subheadline?: string;
     subtitle?: string;
@@ -61,20 +68,24 @@ export async function synthesizeCopy(
 
   // Support both the new schema (headline/subheadline/pain_points) and the legacy
   // schema (headline/subtitle/benefits) in case the LLM returns the old format.
-  const headline = parsed.headline ?? segment;
-  const subheadline = parsed.subheadline ?? parsed.subtitle ?? '';
-  const cta = parsed.cta ?? 'Quiero acceso prioritario';
+  const headline = typedParsed.headline ?? segment;
+  const subheadline = typedParsed.subheadline ?? typedParsed.subtitle ?? '';
+  const cta = typedParsed.cta ?? 'Quiero acceso prioritario';
 
   let pain_points: string[];
-  if (Array.isArray(parsed.pain_points) && parsed.pain_points.length > 0) {
-    pain_points = parsed.pain_points.slice(0, 3) as string[];
-  } else if (Array.isArray(parsed.benefits) && parsed.benefits.length > 0) {
-    pain_points = parsed.benefits.slice(0, 3).map(b => b.title);
+  if (Array.isArray(typedParsed.pain_points) && typedParsed.pain_points.length > 0) {
+    pain_points = typedParsed.pain_points.slice(0, 3) as string[];
+  } else if (Array.isArray(typedParsed.benefits) && typedParsed.benefits.length > 0) {
+    pain_points = typedParsed.benefits.slice(0, 3).map(b => b.title);
   } else {
     pain_points = [];
   }
 
   return { headline, subheadline, cta, pain_points };
+}
+
+function escHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 export function buildHtml(
@@ -84,7 +95,7 @@ export function buildHtml(
   const { headline, subheadline, cta = 'Quiero acceso prioritario', pain_points = [] } = copy;
 
   const painPointsHtml = pain_points
-    .map(p => `<div class="benefit"><p>${p}</p></div>`)
+    .map(p => `<div class="benefit"><p>${escHtml(p)}</p></div>`)
     .join('\n');
 
   return `<!DOCTYPE html>
@@ -92,7 +103,7 @@ export function buildHtml(
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${headline}</title>
+  <title>${escHtml(headline)}</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: #020817; color: #e2e8f0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
@@ -111,13 +122,13 @@ export function buildHtml(
 </head>
 <body>
   <div class="container">
-    <h1>${headline}</h1>
-    <p class="subtitle">${subheadline}</p>
+    <h1>${escHtml(headline)}</h1>
+    <p class="subtitle">${escHtml(subheadline)}</p>
     <div class="benefits">${painPointsHtml}</div>
     <form id="form" action="/signup" method="POST">
-      <input type="hidden" name="segment" value="${segment}">
+      <input type="hidden" name="segment" value="${escHtml(segment)}">
       <input type="email" name="email" placeholder="tu@email.com" required>
-      <button type="submit">${cta}</button>
+      <button type="submit">${escHtml(cta)}</button>
     </form>
     <p class="success" id="ok">✓ Apuntado. Te avisamos primero.</p>
   </div>
