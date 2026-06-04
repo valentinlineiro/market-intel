@@ -419,6 +419,224 @@ describe("formatAlert", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Ported from deleted score.test.js (JS migration coverage)
+// ---------------------------------------------------------------------------
+
+describe("computeOpportunityScore (ported)", () => {
+  it("returns 0 for empty breakdown", () => {
+    expect(computeOpportunityScore({ dolor: 0, capacidad_pago: 0, volumen: 0, competencia: 0, urgencia: 0 })).toBe(0);
+  });
+
+  it("applies weights correctly (all dimensions = 10 → score = 10)", () => {
+    const breakdown = { dolor: 10, capacidad_pago: 10, volumen: 10, competencia: 10, urgencia: 10 };
+    expect(computeOpportunityScore(breakdown)).toBe(10);
+  });
+
+  it("uses partial breakdown (only dolor set)", () => {
+    // dolor weight = 0.30, so 10 * 0.30 = 3
+    expect(computeOpportunityScore({ dolor: 10, capacidad_pago: 0, volumen: 0, competencia: 0, urgencia: 0 })).toBe(3);
+  });
+});
+
+describe("incomeTierScore (ported)", () => {
+  it("returns 10 for high", () => expect(incomeTierScore("high")).toBe(10));
+  it("returns 7 for medium_high", () => expect(incomeTierScore("medium_high")).toBe(7));
+  it("returns 5 for medium", () => expect(incomeTierScore("medium")).toBe(5));
+  it("returns 2 for low", () => expect(incomeTierScore("low")).toBe(2));
+  it("returns 2 for unknown tier", () => expect(incomeTierScore("unknown")).toBe(2));
+});
+
+describe("urgencyScore (ported)", () => {
+  it("returns 10 when has deadline", () => expect(urgencyScore(true)).toBe(10));
+  it("returns 0 when no deadline", () => expect(urgencyScore(false)).toBe(0));
+});
+
+describe("volumeScore (ported)", () => {
+  it("caps at 10", () => expect(volumeScore(999)).toBe(10));
+  it("normalises: discovery_score 20 → 10", () => expect(volumeScore(20)).toBe(10));
+  it("normalises: discovery_score 10 → 5", () => expect(volumeScore(10)).toBe(5));
+  it("returns 0 for 0", () => expect(volumeScore(0)).toBe(0));
+});
+
+describe("dolorScore (ported)", () => {
+  it("returns [0, ''] for empty signals", () => {
+    const [score, summary] = dolorScore([]);
+    expect(score).toBe(0);
+    expect(summary).toBe("");
+  });
+
+  it("returns 0 for signals older than 30 days", () => {
+    const old = new Date(Date.now() - 31 * 86400000).toISOString();
+    const signal: Signal = {
+      id: "s-old",
+      source: "gnews",
+      collected_at: old,
+      segment: "test",
+      location: null,
+      raw_text: "old text",
+      url: "http://example.com/old",
+      pain_keywords: ["pain"],
+      sentiment_score: null,
+      salary_mean: null,
+      income_tier: null,
+      signal_strength: 1.0,
+      has_deadline: false,
+    };
+    const [score] = dolorScore([signal]);
+    expect(score).toBe(0);
+  });
+
+  it("scores recent signals > 0", () => {
+    const now = Date.now();
+    const recentTs = new Date(now - 86400000).toISOString();
+    const signals: Signal[] = Array.from({ length: 10 }, (_, i) => ({
+      id: `s${i}`,
+      source: "gnews" as const,
+      collected_at: recentTs,
+      segment: "test",
+      location: null,
+      raw_text: "text",
+      url: `http://example.com/${i}`,
+      pain_keywords: ["burocracia", "multa"],
+      sentiment_score: null,
+      salary_mean: null,
+      income_tier: null,
+      signal_strength: 0.8,
+      has_deadline: false,
+    }));
+    const [score, summary] = dolorScore(signals, now);
+    expect(score).toBeGreaterThan(0);
+    expect(summary).toMatch(/burocracia|multa|señales/);
+  });
+
+  it("never exceeds 10", () => {
+    const now = Date.now();
+    const recentTs = new Date(now - 86400000).toISOString();
+    const signals: Signal[] = Array.from({ length: 100 }, (_, i) => ({
+      id: `s${i}`,
+      source: "gnews" as const,
+      collected_at: recentTs,
+      segment: "test",
+      location: null,
+      raw_text: "text",
+      url: `http://example.com/bulk-${i}`,
+      pain_keywords: ["pain"],
+      sentiment_score: null,
+      salary_mean: null,
+      income_tier: null,
+      signal_strength: 1.0,
+      has_deadline: false,
+    }));
+    const [score] = dolorScore(signals, now);
+    expect(score).toBeLessThanOrEqual(10);
+  });
+});
+
+describe("applyRules (ported)", () => {
+  const baseOpp: Opportunity = {
+    id: "ported-abc",
+    segment: "test",
+    pain_summary: "",
+    score: 6.0,
+    score_breakdown: { dolor: 6, capacidad_pago: 6, volumen: 6, competencia: 6, urgencia: 6 },
+    signal_ids: [],
+    signal_count: 5,
+    first_seen: new Date().toISOString(),
+    last_updated: new Date().toISOString(),
+    status: "watching",
+    landing_url: null,
+    emails_captured: 0,
+    validation_deadline: null,
+    telegram_alerted_at: null,
+  };
+
+  it("does not change already-killed opp", () => {
+    const opp: Opportunity = { ...baseOpp, status: "killed" };
+    expect(applyRules(opp).status).toBe("killed");
+  });
+
+  it("kills opp with no signals after threshold days", () => {
+    const old = new Date(Date.now() - 10 * 86400000).toISOString();
+    const opp: Opportunity = { ...baseOpp, signal_count: 0, score: 4.0, first_seen: old };
+    expect(applyRules(opp).status).toBe("killed");
+  });
+
+  it("does not kill if score is above kill threshold", () => {
+    const old = new Date(Date.now() - 10 * 86400000).toISOString();
+    const opp: Opportunity = { ...baseOpp, signal_count: 0, score: KILL_SCORE_THRESHOLD + 1, first_seen: old };
+    expect(applyRules(opp).status).toBe("watching");
+  });
+
+  it("scales opp with high score and enough emails", () => {
+    const opp: Opportunity = { ...baseOpp, score: SCALE_SCORE_THRESHOLD + 0.1, emails_captured: 30 };
+    expect(applyRules(opp).status).toBe("scaling");
+  });
+});
+
+describe("shouldAlert (ported)", () => {
+  it("returns true when never alerted and score above threshold", () => {
+    const opp: Opportunity = {
+      id: "p1",
+      segment: "s",
+      pain_summary: "",
+      score: ALERT_SCORE_THRESHOLD + 1,
+      score_breakdown: { dolor: 8, capacidad_pago: 8, volumen: 8, competencia: 8, urgencia: 8 },
+      signal_ids: [],
+      signal_count: 0,
+      first_seen: new Date().toISOString(),
+      last_updated: new Date().toISOString(),
+      status: "watching",
+      landing_url: null,
+      emails_captured: 0,
+      validation_deadline: null,
+      telegram_alerted_at: null,
+    };
+    expect(shouldAlert(opp)).toBe(true);
+  });
+
+  it("returns false when already alerted", () => {
+    const recent = new Date(Date.now() - 12 * 3600000).toISOString();
+    const opp: Opportunity = {
+      id: "p2",
+      segment: "s",
+      pain_summary: "",
+      score: ALERT_SCORE_THRESHOLD + 1,
+      score_breakdown: { dolor: 8, capacidad_pago: 8, volumen: 8, competencia: 8, urgencia: 8 },
+      signal_ids: [],
+      signal_count: 0,
+      first_seen: new Date().toISOString(),
+      last_updated: new Date().toISOString(),
+      status: "watching",
+      landing_url: null,
+      emails_captured: 0,
+      validation_deadline: null,
+      telegram_alerted_at: recent,
+    };
+    expect(shouldAlert(opp)).toBe(false);
+  });
+
+  it("returns false when score below alert threshold", () => {
+    const opp: Opportunity = {
+      id: "p3",
+      segment: "s",
+      pain_summary: "",
+      score: ALERT_SCORE_THRESHOLD - 1,
+      score_breakdown: { dolor: 5, capacidad_pago: 5, volumen: 5, competencia: 5, urgencia: 5 },
+      signal_ids: [],
+      signal_count: 0,
+      first_seen: new Date().toISOString(),
+      last_updated: new Date().toISOString(),
+      status: "watching",
+      landing_url: null,
+      emails_captured: 0,
+      validation_deadline: null,
+      telegram_alerted_at: null,
+    };
+    expect(shouldAlert(opp)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Constants exported from rules.ts
 // ---------------------------------------------------------------------------
 
