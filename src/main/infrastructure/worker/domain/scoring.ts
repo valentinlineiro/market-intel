@@ -57,15 +57,11 @@ export function dolorScore(signals: Signal[], now: number = Date.now()): [number
   const recent = signals.filter(s => new Date(s.collected_at).getTime() > cutoff);
   if (!recent.length) return [0, ''];
 
-  const freqScore = Math.min(recent.length / 20, 1.0) * 10;
   let weighted = 0;
   let totalW = 0;
   const allKw: string[] = [];
 
   for (const s of recent) {
-    const w = new Date(s.collected_at).getTime() > weekAgo ? 2.0 : 1.0;
-    weighted += (s.signal_strength ?? 0) * w;
-    totalW += w;
     let kws: string[] = [];
     try {
       const raw = s.pain_keywords;
@@ -73,12 +69,27 @@ export function dolorScore(signals: Signal[], now: number = Date.now()): [number
     } catch {
       kws = [];
     }
+    // Specificity heuristic (stopgap until friction detection):
+    // 0 keywords → noise, discount heavily (0.3x)
+    // 1 keyword  → plausible but weak (0.7x)
+    // 2+ keywords → meaningful signal (1.0x)
+    const specificity = kws.length === 0 ? 0.3 : kws.length === 1 ? 0.7 : 1.0;
+
+    const w = new Date(s.collected_at).getTime() > weekAgo ? 2.0 : 1.0;
+    weighted += (s.signal_strength ?? 0) * w * specificity;
+    totalW += w;
     allKw.push(...kws);
   }
 
+  // Base score: average signal quality (0-10)
   const intensity = totalW ? (weighted / totalW) * 10 : 0;
+
+  // Volume bonus: diminishing returns, max +2.0 for high volume.
+  // x/(x+5) caps at 1.0 asymptotically → * 2 = max 2 extra points.
+  const volBonus = Math.min(recent.length / (recent.length + 5), 1.0) * 2;
+
   const dolor = Math.min(
-    Math.round((freqScore * 0.5 + intensity * 0.5) * 100) / 100,
+    Math.round((intensity + volBonus) * 100) / 100,
     10.0,
   );
 

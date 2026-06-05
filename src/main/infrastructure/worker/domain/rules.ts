@@ -1,8 +1,8 @@
 import type { ScoreBreakdown } from './types.js';
 
 export const SCORE_WEIGHTS: Record<keyof ScoreBreakdown, number> = {
-  dolor: 0.30,
-  capacidad_pago: 0.25,
+  dolor: 0.35,
+  capacidad_pago: 0.20,
   volumen: 0.20,
   competencia: 0.15,
   urgencia: 0.10,

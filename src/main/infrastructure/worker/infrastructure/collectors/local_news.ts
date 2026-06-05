@@ -19,10 +19,10 @@ function sentimentScore(text: string, painKeywords: string[]): number {
 }
 
 function signalStrength(matchedKeywords: number, sentScore: number, textLength: number): number {
-  const kwScore  = Math.min(matchedKeywords / 3, 1.0);
+  const kwScore  = Math.min(matchedKeywords / 5, 1.0);
   const sScore   = Math.min(Math.abs(sentScore), 1.0);
   const lenScore = Math.min(textLength / 500, 1.0);
-  return Math.min(1.0, Math.round((kwScore * 0.45 + sScore * 0.35 + lenScore * 0.15) * 1000) / 1000);
+  return Math.min(1.0, Math.round((kwScore * 0.50 + sScore * 0.35 + lenScore * 0.15) * 1000) / 1000);
 }
 
 async function fetchFeed(url: string): Promise<FeedItem[]> {

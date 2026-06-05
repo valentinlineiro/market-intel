@@ -147,6 +147,48 @@ describe("dolorScore", () => {
     const [score] = dolorScore(signals, FIXED_NOW);
     expect(score).toBeLessThanOrEqual(10);
   });
+
+  it("high-quality low-volume beats low-quality high-volume", () => {
+    const now = FIXED_NOW;
+    const recentTs = new Date(now - 86400000).toISOString();
+    // 20 weak signals (ss 0.3) — generic noise
+    const weak: Signal[] = Array.from({ length: 20 }, (_, i) => ({
+      id: `weak-${i}`, source: "gnews" as const, collected_at: recentTs,
+      segment: "test", location: null, raw_text: "generic news", url: `http://ex.com/${i}`,
+      pain_keywords: ["generic"], sentiment_score: null, salary_mean: null,
+      income_tier: null, signal_strength: 0.3, has_deadline: false,
+    }));
+    // 5 strong signals (ss 0.9) — specific complaints
+    const strong: Signal[] = Array.from({ length: 5 }, (_, i) => ({
+      id: `str-${i}`, source: "gnews" as const, collected_at: recentTs,
+      segment: "test", location: null, raw_text: "specific complaint about X", url: `http://ex.com/s${i}`,
+      pain_keywords: ["specific", "pain"], sentiment_score: null, salary_mean: null,
+      income_tier: null, signal_strength: 0.9, has_deadline: false,
+    }));
+    const [strongScore] = dolorScore(strong, now);
+    const [weakScore] = dolorScore(weak, now);
+    expect(strongScore).toBeGreaterThan(weakScore);
+  });
+
+  it("specific complaint (ss=0.8, n=3) beats generic volume (ss=0.3, n=30)", () => {
+    const now = FIXED_NOW;
+    const ts = new Date(now - 86400000).toISOString();
+    const specific: Signal[] = Array.from({ length: 3 }, (_, i) => ({
+      id: `sp-${i}`, source: "gnews" as const, collected_at: ts,
+      segment: "test", location: null, raw_text: "real complaint", url: `http://ex.com/sp${i}`,
+      pain_keywords: ["dolor", "problema"], sentiment_score: null, salary_mean: null,
+      income_tier: null, signal_strength: 0.8, has_deadline: false,
+    }));
+    const generic: Signal[] = Array.from({ length: 30 }, (_, i) => ({
+      id: `gn-${i}`, source: "gnews" as const, collected_at: ts,
+      segment: "test", location: null, raw_text: "generic news article", url: `http://ex.com/gn${i}`,
+      pain_keywords: ["news"], sentiment_score: null, salary_mean: null,
+      income_tier: null, signal_strength: 0.3, has_deadline: false,
+    }));
+    const [specScore] = dolorScore(specific, now);
+    const [genScore] = dolorScore(generic, now);
+    expect(specScore).toBeGreaterThan(genScore);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -433,8 +475,8 @@ describe("computeOpportunityScore (ported)", () => {
   });
 
   it("uses partial breakdown (only dolor set)", () => {
-    // dolor weight = 0.30, so 10 * 0.30 = 3
-    expect(computeOpportunityScore({ dolor: 10, capacidad_pago: 0, volumen: 0, competencia: 0, urgencia: 0 })).toBe(3);
+    // dolor weight = 0.35, so 10 * 0.35 = 3.5
+    expect(computeOpportunityScore({ dolor: 10, capacidad_pago: 0, volumen: 0, competencia: 0, urgencia: 0 })).toBe(3.5);
   });
 });
 
@@ -529,6 +571,26 @@ describe("dolorScore (ported)", () => {
     }));
     const [score] = dolorScore(signals, now);
     expect(score).toBeLessThanOrEqual(10);
+  });
+
+  it("high-quality low-volume beats low-quality high-volume (ported)", () => {
+    const now = Date.now();
+    const ts = new Date(now - 86400000).toISOString();
+    const specific: Signal[] = Array.from({ length: 3 }, (_, i) => ({
+      id: `sp-${i}`, source: "gnews" as const, collected_at: ts,
+      segment: "test", location: null, raw_text: "real complaint", url: `http://ex.com/sp${i}`,
+      pain_keywords: ["dolor"], sentiment_score: null, salary_mean: null,
+      income_tier: null, signal_strength: 0.8, has_deadline: false,
+    }));
+    const generic: Signal[] = Array.from({ length: 30 }, (_, i) => ({
+      id: `gn-${i}`, source: "gnews" as const, collected_at: ts,
+      segment: "test", location: null, raw_text: "generic news", url: `http://ex.com/gn${i}`,
+      pain_keywords: ["news"], sentiment_score: null, salary_mean: null,
+      income_tier: null, signal_strength: 0.3, has_deadline: false,
+    }));
+    const [specScore] = dolorScore(specific, now);
+    const [genScore] = dolorScore(generic, now);
+    expect(specScore).toBeGreaterThan(genScore);
   });
 });
 
