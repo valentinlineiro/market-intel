@@ -414,4 +414,16 @@ describe('D1Repo — market tests', () => {
     const test = await repo.getMarketTest('does-not-exist');
     expect(test).toBeNull();
   });
+
+  it('completeMarketTest is a no-op for unknown id (internal invariant)', async () => {
+    const result = {
+      score: 5.0,
+      breakdown: { dolor: 5, capacidad_pago: 5, volumen: 5, competencia: 5, urgencia: 5 },
+      pain_summary: '',
+      signal_count: 0,
+      signals: [],
+    };
+    // Should not throw — caller guarantees id exists after claimMarketTest
+    await expect(repo.completeMarketTest('no-such-id', result, new Date().toISOString())).resolves.toBeUndefined();
+  });
 });
