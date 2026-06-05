@@ -1,4 +1,4 @@
-import type { Signal, Opportunity, Lead, DiscoveryCandidate, SegmentConfig } from '../domain/types.js';
+import type { Signal, Opportunity, Lead, DiscoveryCandidate, SegmentConfig, GnewsSegmentConfig, MarketTest, MarketTestResult } from '../domain/types.js';
 
 export interface ISignalRepo {
   save(signal: Signal): Promise<boolean>;
@@ -31,4 +31,13 @@ export interface ILLMProvider {
 
 export interface INotifier {
   send(subject: string, html: string, text: string): Promise<boolean>;
+}
+
+export interface IMarketTestRepo {
+  createMarketTest(id: string, description: string, now: string): Promise<void>;
+  claimMarketTest(id: string, now: string): Promise<boolean>;
+  updateMarketTestConfig(id: string, config: GnewsSegmentConfig, now: string): Promise<void>;
+  completeMarketTest(id: string, result: MarketTestResult, now: string): Promise<void>;
+  failMarketTest(id: string, error: string, now: string): Promise<void>;
+  getMarketTest(id: string): Promise<MarketTest | null>;
 }

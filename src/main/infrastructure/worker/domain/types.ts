@@ -112,3 +112,22 @@ export interface Config {
   };
   synthesis_segments: Record<string, SegmentConfig>;
 }
+
+export interface MarketTestResult {
+  score: number;
+  breakdown: ScoreBreakdown;
+  pain_summary: string;
+  signal_count: number;
+  signals: Signal[];
+}
+
+export interface MarketTest {
+  id: string;
+  description: string;
+  generated_config: GnewsSegmentConfig | null;
+  status: 'pending' | 'running' | 'done' | 'failed';
+  result: MarketTestResult | null;
+  error: string | null;
+  created_at: string;
+  updated_at: string;
+}
