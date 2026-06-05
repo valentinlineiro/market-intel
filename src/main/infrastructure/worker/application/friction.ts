@@ -42,7 +42,7 @@ export async function analyzeFriction(
       const end = raw.lastIndexOf('}');
       if (start === -1 || end === -1) continue;
       const profile = JSON.parse(raw.slice(start, end + 1)) as FrictionProfile;
-      const quality = (profile.intensity / 10) * (0.6 + 0.4 * profile.confidence);
+      const quality = Math.min(1, (profile.intensity / 10) * (0.6 + 0.4 * profile.confidence));
       await repo.updateFriction(signal.id, quality, profile);
     } catch {
       // original signal_strength preserved on any failure
