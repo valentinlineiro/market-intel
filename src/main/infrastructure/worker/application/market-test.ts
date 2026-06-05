@@ -1,5 +1,5 @@
 import type { ISignalRepo, ILLMProvider, IMarketTestRepo } from './ports.js';
-import type { Signal, GnewsSegmentConfig, MarketTestResult } from '../domain/types.js';
+import type { Signal, GnewsSegmentConfig, MarketTestResult, FrictionProfile } from '../domain/types.js';
 import { collectGnews } from '../infrastructure/collectors/gnews.js';
 import { runCollect } from './collect.js';
 import {
@@ -45,6 +45,14 @@ export class InMemorySignalRepo implements ISignalRepo {
     return this.signals.length;
   }
 
+  async updateFriction(id: string, strength: number, profile: FrictionProfile): Promise<void> {
+    const s = this.signals.find(sig => sig.id === id);
+    if (s) {
+      s.signal_strength = strength;
+      s.friction_analysis = JSON.stringify(profile);
+    }
+  }
+
   getSignals(): Signal[] {
     return [...this.signals];
   }
@@ -57,7 +65,10 @@ async function generateSegmentConfig(
   const prompt = CONFIG_PROMPT.replace('{description}', description);
   let raw = await llm.complete(prompt, 400);
   raw = raw.replace(/^```[\w]*\n?/, '').replace(/\n?```$/, '').trim();
-  return JSON.parse(raw) as GnewsSegmentConfig;
+  const start = raw.indexOf('{');
+  const end = raw.lastIndexOf('}');
+  if (start === -1 || end === -1) throw new Error(`LLM returned no JSON object: ${raw.slice(0, 80)}`);
+  return JSON.parse(raw.slice(start, end + 1)) as GnewsSegmentConfig;
 }
 
 export async function runMarketTest(

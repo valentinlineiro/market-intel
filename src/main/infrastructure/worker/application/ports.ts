@@ -1,10 +1,11 @@
-import type { Signal, Opportunity, Lead, DiscoveryCandidate, SegmentConfig, GnewsSegmentConfig, MarketTest, MarketTestResult } from '../domain/types.js';
+import type { Signal, Opportunity, Lead, DiscoveryCandidate, SegmentConfig, GnewsSegmentConfig, MarketTest, MarketTestResult, FrictionProfile } from '../domain/types.js';
 
 export interface ISignalRepo {
   save(signal: Signal): Promise<boolean>;
   get(segment: string, limit: number): Promise<Signal[]>;
   getAll(limit: number): Promise<Signal[]>;
   count(segment?: string): Promise<number>;
+  updateFriction(id: string, strength: number, profile: FrictionProfile): Promise<void>;
 }
 
 export interface IOpportunityRepo {
