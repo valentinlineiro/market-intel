@@ -9,6 +9,7 @@ import type {
   GnewsSegmentConfig,
   MarketTest,
   MarketTestResult,
+  FrictionProfile,
 } from '../../domain/types.js';
 import type {
   ISignalRepo,
@@ -48,6 +49,7 @@ function rowToSignal(r: Record<string, unknown>): Signal {
     income_tier:      (r['income_tier'] as string | null) ?? null,
     signal_strength:  (r['signal_strength'] as number | null) ?? null,
     has_deadline:     r['has_deadline'] === 1 || r['has_deadline'] === true,
+    friction_analysis: (r['friction_analysis'] as string | null) ?? null,
   };
 }
 
@@ -163,6 +165,15 @@ export class D1Repo implements ISignalRepo, IOpportunityRepo, ILeadRepo, IDiscov
           .prepare('SELECT COUNT(*) as n FROM signals')
           .first<Record<string, unknown>>();
     return (row?.['n'] as number) ?? 0;
+  }
+
+  async updateFriction(id: string, strength: number, profile: FrictionProfile): Promise<void> {
+    await this.db
+      .prepare(
+        `UPDATE signals SET signal_strength = ?, friction_analysis = ?, updated_at = ? WHERE id = ?`
+      )
+      .bind(strength, JSON.stringify(profile), new Date().toISOString(), id)
+      .run();
   }
 
   // ── IOpportunityRepo ─────────────────────────────────────────────────────
