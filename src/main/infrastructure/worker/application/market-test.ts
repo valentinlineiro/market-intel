@@ -83,7 +83,7 @@ export async function runMarketTest(
     const breakdown = {
       dolor,
       capacidad_pago: incomeTierScore(config.income_tier),
-      volumen:        volumeScore(5.0),
+      volumen:        volumeScore(signals.length),
       competencia:    DEFAULT_COMPETENCIA_SCORE,
       urgencia:       urgencyScore(config.has_deadline),
     };
@@ -100,6 +100,10 @@ export async function runMarketTest(
     await repo.completeMarketTest(id, result, now());
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
-    await repo.failMarketTest(id, message, now());
+    try {
+      await repo.failMarketTest(id, message, now());
+    } catch (persistErr) {
+      console.error('market-test: failed to persist failure for', id, persistErr);
+    }
   }
 }

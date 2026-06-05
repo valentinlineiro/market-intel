@@ -280,7 +280,6 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
 
     if (path.startsWith('/market-test/') && method === 'GET') {
       const id = path.slice('/market-test/'.length);
-      if (!id) return json({ error: 'test id required' }, 400);
       const d1repo = new D1Repo(env.DB);
       const test = await d1repo.getMarketTest(id);
       if (!test) return json({ error: 'not found' }, 404);

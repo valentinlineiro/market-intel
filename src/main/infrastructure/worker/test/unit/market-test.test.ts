@@ -166,4 +166,13 @@ describe('runMarketTest', () => {
     expect(test?.status).toBe('failed');
     expect(test?.error).toBeDefined();
   });
+
+  it('sets status=failed when collectGnews throws', async () => {
+    const { collectGnews } = await import('../../infrastructure/collectors/gnews.js');
+    vi.mocked(collectGnews).mockRejectedValueOnce(new Error('network error'));
+    await runMarketTest('t1', 'dentists in pain', makeMockLlm(), repo);
+    const test = repo.store.get('t1');
+    expect(test?.status).toBe('failed');
+    expect(test?.error).toBe('network error');
+  });
 });
