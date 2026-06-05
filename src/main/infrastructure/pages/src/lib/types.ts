@@ -61,8 +61,8 @@ export interface Config {
 }
 
 export interface LandingCopy {
-  title: string;
-  subtitle: string;
-  benefits: [string, string, string][];
+  headline: string;
+  subheadline: string;
+  pain_points: string[];
   cta: string;
 }

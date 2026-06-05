@@ -8,8 +8,8 @@
   const dispatch = createEventDispatcher<{ close: void }>();
 
   let copy: LandingCopy | null = null;
-  let title = '';
-  let subtitle = '';
+  let headline = '';
+  let subheadline = '';
   let cta = '';
   let status = 'Generando copy con LLM...';
   let deploying = false;
@@ -17,9 +17,9 @@
   async function loadCopy() {
     try {
       copy = await synthesizeCopy(segment);
-      title    = copy.title    ?? '';
-      subtitle = copy.subtitle ?? '';
-      cta      = copy.cta      ?? '';
+      headline    = copy.headline    ?? '';
+      subheadline = copy.subheadline ?? '';
+      cta         = copy.cta         ?? '';
       status   = 'Revisa y edita el copy antes de deployar.';
     } catch (e) {
       status = `Error: ${(e as Error).message}`;
@@ -32,7 +32,7 @@
     if (!copy) return;
     deploying = true;
     status = 'Deployando...';
-    const finalCopy: LandingCopy = { ...copy, title, subtitle, cta };
+    const finalCopy: LandingCopy = { ...copy, headline, subheadline, cta };
     try {
       const fd = new FormData();
       fd.set('segment', segment);
@@ -58,9 +58,9 @@
     <h3>Editar copy · <span>{segment}</span></h3>
     <div class="fields">
       <label>Headline</label>
-      <input type="text" bind:value={title} />
-      <label>Subtitle</label>
-      <textarea rows="3" bind:value={subtitle}></textarea>
+      <input type="text" bind:value={headline} />
+      <label>Subheadline</label>
+      <textarea rows="3" bind:value={subheadline}></textarea>
       <label>CTA</label>
       <input type="text" bind:value={cta} />
     </div>
