@@ -38,9 +38,12 @@ import { EmailNotifier } from './infrastructure/notify.js';
 import type { SendEmail } from './infrastructure/notify.js';
 import { collectGnews } from './infrastructure/collectors/gnews.js';
 import { collectLocalNews } from './infrastructure/collectors/local_news.js';
+import { collectGitHub } from './infrastructure/collectors/github.js';
+import type { Signal } from './domain/types.js';
 import { runCollect } from './application/collect.js';
 import { runScore } from './application/score.js';
 import { runDiscovery } from './application/discover.js';
+import { analyzeFriction } from './application/friction.js';
 import { synthesizeCopy, buildHtml } from './application/synthesize.js';
 import { runMarketTest } from './application/market-test.js';
 
@@ -53,6 +56,7 @@ export interface Env {
   WORKER_SECRET: string;
   GROQ_API_KEY?: string;
   OPENROUTER_API_KEY?: string;
+  GITHUB_TOKEN?: string;
   EMAIL?: SendEmail;
 }
 
@@ -219,6 +223,31 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
       return json({ saved: candidates.length });
     }
 
+    if (path === '/collect/github-debug' && method === 'GET') {
+      const keywords = [
+        'verifactu', 'hacienda', 'facturación', 'rrsif', 'multa', 'gestión clínica',
+        'aneca', 'acreditación', 'sexenio', 'docentia', 'plaza',
+        'lexnet', 'irpf', 'turno oficio', 'honorarios',
+        'visado colegial', 'licencia obras', 'burocracia', 'certificado energético',
+      ];
+      const signals = await collectGitHub(keywords, 'debug', env.GITHUB_TOKEN);
+      const ss: number[] = signals.map(s => s.signal_strength ?? 0);
+      const buckets: Record<string, number> = { '0-0.2': 0, '0.2-0.4': 0, '0.4-0.6': 0, '0.6-0.8': 0, '0.8-1.0': 0 };
+      for (const v of ss) {
+        if (v < 0.2) buckets['0-0.2']++;
+        else if (v < 0.4) buckets['0.2-0.4']++;
+        else if (v < 0.6) buckets['0.4-0.6']++;
+        else if (v < 0.8) buckets['0.6-0.8']++;
+        else buckets['0.8-1.0']++;
+      }
+      const avg = ss.length ? (ss.reduce((a, b) => a + b, 0) / ss.length) : 0;
+      const top = signals.sort((a, b) => (b.signal_strength ?? 0) - (a.signal_strength ?? 0)).slice(0, 5).map(s => ({
+        ss: s.signal_strength ?? 0, kw: s.pain_keywords, sent: s.sentiment_score,
+        url: s.url, excerpt: s.raw_text.slice(0, 100),
+      }));
+      return json({ signal_count: signals.length, ss_mean: avg, ss_distribution: buckets, top });
+    }
+
     if (path === '/discover' && method === 'POST') {
       if (!env.GROQ_API_KEY && !env.OPENROUTER_API_KEY)
         return json({ error: 'No LLM key configured (GROQ_API_KEY or OPENROUTER_API_KEY required)' }, 503);
@@ -309,7 +338,16 @@ const scheduled: ExportedHandlerScheduledHandler<Env> = async (_event, env, ctx)
     // Collect
     const gnewsCollector = () => collectGnews(cfg.collectors.gnews.segments, env.GROQ_API_KEY ?? '');
     const localNewsCollector = () => collectLocalNews(cfg.collectors.local_news);
-    await runCollect(d1repo, [gnewsCollector, localNewsCollector]);
+    const githubCollector = async () => {
+      const all: Signal[] = [];
+      for (const [segment, sc] of Object.entries(cfg.collectors.gnews.segments)) {
+        const signals = await collectGitHub(sc.keywords, segment, env.GITHUB_TOKEN);
+        all.push(...signals);
+      }
+      return all;
+    };
+    const fresh = await runCollect(d1repo, [gnewsCollector, localNewsCollector, githubCollector]);
+    await analyzeFriction(fresh, llm, d1repo);
 
     // Score
     await runScore(
