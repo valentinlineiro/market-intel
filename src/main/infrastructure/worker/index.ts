@@ -18,6 +18,8 @@
  *   POST   /discovery/candidates
  *   POST   /discover
  *   POST   /score
+ *   POST   /market-test
+ *   GET    /market-test/:id
  *
  * Public routes (no auth required):
  *   GET    /public/stats
@@ -40,6 +42,7 @@ import { runCollect } from './application/collect.js';
 import { runScore } from './application/score.js';
 import { runDiscovery } from './application/discover.js';
 import { synthesizeCopy, buildHtml } from './application/synthesize.js';
+import { runMarketTest } from './application/market-test.js';
 
 // ---------------------------------------------------------------------------
 // Env interface
@@ -78,7 +81,7 @@ function json(body: unknown, status = 200): Response {
 // Fetch handler
 // ---------------------------------------------------------------------------
 
-const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env) => {
+const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => {
   if (request.method === 'OPTIONS')
     return new Response(null, { status: 204, headers: CORS });
 
@@ -257,6 +260,31 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env) => {
         body.dry_run ?? cfg.score.dry_run,
       );
       return json({ results });
+    }
+
+    if (path === '/market-test' && method === 'POST') {
+      const { description } = await request.json() as { description?: string };
+      if (!description || typeof description !== 'string' || !description.trim())
+        return json({ error: 'description required' }, 400);
+      if (!env.GROQ_API_KEY && !env.OPENROUTER_API_KEY)
+        return json({ error: 'No LLM key configured (GROQ_API_KEY or OPENROUTER_API_KEY required)' }, 503);
+      const id   = crypto.randomUUID().slice(0, 12);
+      const now  = new Date().toISOString();
+      const d1repo = new D1Repo(env.DB);
+      await d1repo.createMarketTest(id, description.trim(), now);
+      const cfg = await getConfig(env.DB);
+      const llm = new LLMChain(cfg.llm, env.GROQ_API_KEY, env.OPENROUTER_API_KEY);
+      ctx.waitUntil(runMarketTest(id, description.trim(), llm, d1repo));
+      return json({ test_id: id });
+    }
+
+    if (path.startsWith('/market-test/') && method === 'GET') {
+      const id = path.slice('/market-test/'.length);
+      if (!id) return json({ error: 'test id required' }, 400);
+      const d1repo = new D1Repo(env.DB);
+      const test = await d1repo.getMarketTest(id);
+      if (!test) return json({ error: 'not found' }, 404);
+      return json(test);
     }
 
     return json({ error: 'not found' }, 404);
