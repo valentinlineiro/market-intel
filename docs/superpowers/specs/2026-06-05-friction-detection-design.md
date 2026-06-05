@@ -34,6 +34,19 @@ Expected volume: ~1–2 GNews signals + all GitHub signals per cycle. Token budg
 
 ---
 
+## Signal type change (domain/types.ts)
+
+`friction_analysis` added as optional nullable field — present only when a signal has been enriched:
+
+```typescript
+// added to Signal interface
+friction_analysis?: string | null;  // JSON FrictionProfile; null = not yet analyzed
+```
+
+`analyzeFriction` skips signals where `friction_analysis` is already set, but since it receives only fresh signals from `runCollect`, this is a safety guard rather than the primary mechanism.
+
+---
+
 ## Types (domain/types.ts)
 
 ```typescript
@@ -140,21 +153,34 @@ ALTER TABLE signals ADD COLUMN updated_at TEXT;
 
 ---
 
+## runCollect signature change (application/collect.ts)
+
+`runCollect` changes from `Promise<void>` to `Promise<Signal[]>`, returning the concatenation of all signals saved in the cycle. This is the freshest possible input to `analyzeFriction` — no D1 re-fetch, no duplicate processing.
+
+```typescript
+// before
+export async function runCollect(...): Promise<void>
+
+// after
+export async function runCollect(...): Promise<Signal[]>
+```
+
+---
+
 ## Cron Integration (index.ts)
 
 ```typescript
-// existing
-await runCollect(signalRepo, collectors);
+// collect returns fresh signals directly
+const fresh = await runCollect(signalRepo, collectors);
 
 // new — between collect and score
-const freshSignals = await signalRepo.getAll(200);
-await analyzeFriction(freshSignals, llm, signalRepo);
+await analyzeFriction(fresh, llm, signalRepo);
 
 // existing
 await runScore(...);
 ```
 
-`getAll(200)` fetches recent signals. Friction analysis filters internally to eligible signals.
+No `getAll` call needed. `analyzeFriction` receives exactly the signals produced this cycle.
 
 ---
 
@@ -167,6 +193,7 @@ await runScore(...);
 | `application/ports.ts` | Add `updateFriction` to `ISignalRepo` |
 | `infrastructure/db/d1-repo.ts` | Implement `updateFriction` |
 | `migrations/0008_add_friction_analysis.sql` | Add `friction_analysis`, `updated_at` columns |
+| `application/collect.ts` | Change `runCollect` return type from `void` to `Signal[]` |
 | `index.ts` | Wire `analyzeFriction` between collect and score in cron |
 | `test/unit/friction.test.ts` | New — unit tests with mock LLM |
 
