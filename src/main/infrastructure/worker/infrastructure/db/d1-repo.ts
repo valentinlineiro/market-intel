@@ -6,12 +6,16 @@ import type {
   SegmentConfig,
   ScoreBreakdown,
   OpportunityStatus,
+  GnewsSegmentConfig,
+  MarketTest,
+  MarketTestResult,
 } from '../../domain/types.js';
 import type {
   ISignalRepo,
   IOpportunityRepo,
   ILeadRepo,
   IDiscoveryRepo,
+  IMarketTestRepo,
 } from '../../application/ports.js';
 
 // ---------------------------------------------------------------------------
@@ -84,7 +88,7 @@ function rowToLead(r: Record<string, unknown>): Lead {
 // TypeScript does not allow two methods with the same name but different signatures
 // when implementing multiple interfaces.  We satisfy both ISignalRepo.getAll(limit)
 // and IOpportunityRepo.getAll() via overloads.
-export class D1Repo implements ISignalRepo, IOpportunityRepo, ILeadRepo, IDiscoveryRepo {
+export class D1Repo implements ISignalRepo, IOpportunityRepo, ILeadRepo, IDiscoveryRepo, IMarketTestRepo {
   constructor(private readonly db: D1Database) {}
 
   // ── ISignalRepo ──────────────────────────────────────────────────────────
@@ -467,6 +471,66 @@ export class D1Repo implements ISignalRepo, IOpportunityRepo, ILeadRepo, IDiscov
       signals:       (sigRow?.['n'] as number)  ?? 0,
       opportunities: (oppRow?.['n'] as number)  ?? 0,
       leads:         (leadRow?.['n'] as number) ?? 0,
+    };
+  }
+
+  // ── IMarketTestRepo ──────────────────────────────────────────────────────
+
+  async createMarketTest(id: string, description: string, now: string): Promise<void> {
+    await this.db
+      .prepare(`INSERT INTO market_tests (id, description, status, created_at, updated_at) VALUES (?, ?, 'pending', ?, ?)`)
+      .bind(id, description, now, now)
+      .run();
+  }
+
+  async claimMarketTest(id: string, now: string): Promise<boolean> {
+    const result = await this.db
+      .prepare(`UPDATE market_tests SET status = 'running', updated_at = ? WHERE id = ? AND status = 'pending'`)
+      .bind(now, id)
+      .run();
+    return result.meta.changes > 0;
+  }
+
+  async updateMarketTestConfig(id: string, config: GnewsSegmentConfig, now: string): Promise<void> {
+    await this.db
+      .prepare(`UPDATE market_tests SET generated_config = ?, updated_at = ? WHERE id = ?`)
+      .bind(JSON.stringify(config), now, id)
+      .run();
+  }
+
+  async completeMarketTest(id: string, result: MarketTestResult, now: string): Promise<void> {
+    await this.db
+      .prepare(`UPDATE market_tests SET status = 'done', result = ?, updated_at = ? WHERE id = ?`)
+      .bind(JSON.stringify(result), now, id)
+      .run();
+  }
+
+  async failMarketTest(id: string, error: string, now: string): Promise<void> {
+    await this.db
+      .prepare(`UPDATE market_tests SET status = 'failed', error = ?, updated_at = ? WHERE id = ?`)
+      .bind(error, now, id)
+      .run();
+  }
+
+  async getMarketTest(id: string): Promise<MarketTest | null> {
+    const row = await this.db
+      .prepare(`SELECT * FROM market_tests WHERE id = ?`)
+      .bind(id)
+      .first<{
+        id: string; description: string; generated_config: string | null;
+        status: string; result: string | null; error: string | null;
+        created_at: string; updated_at: string;
+      }>();
+    if (!row) return null;
+    return {
+      id: row.id,
+      description: row.description,
+      generated_config: row.generated_config ? (JSON.parse(row.generated_config) as GnewsSegmentConfig) : null,
+      status: row.status as MarketTest['status'],
+      result: row.result ? (JSON.parse(row.result) as MarketTestResult) : null,
+      error: row.error,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
     };
   }
 }

@@ -62,6 +62,7 @@ async function applyMigrations(db: D1Database): Promise<void> {
     `CREATE TABLE IF NOT EXISTS leads (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT NOT NULL, segment TEXT NOT NULL, captured_at TEXT NOT NULL, ip TEXT, ua TEXT, UNIQUE(email, segment))`,
     `CREATE TABLE IF NOT EXISTS landing_pages (segment TEXT PRIMARY KEY, html TEXT NOT NULL, title TEXT, deployed_at TEXT NOT NULL)`,
     `CREATE TABLE IF NOT EXISTS discovery_candidates (id INTEGER PRIMARY KEY AUTOINCREMENT, profile TEXT NOT NULL, pain TEXT NOT NULL, keywords TEXT NOT NULL, source_urls TEXT NOT NULL DEFAULT '[]', post_count INTEGER DEFAULT 0, discovery_score REAL DEFAULT 0, income_est TEXT, has_deadline INTEGER DEFAULT 0, source TEXT DEFAULT 'reddit', run_id TEXT NOT NULL, discovered_at TEXT NOT NULL)`,
+    `CREATE TABLE IF NOT EXISTS market_tests (id TEXT PRIMARY KEY, description TEXT NOT NULL, generated_config TEXT, status TEXT NOT NULL DEFAULT 'pending', result TEXT, error TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
   ];
 
   for (const stmt of ddl) {
@@ -79,7 +80,7 @@ describe('D1Repo', () => {
   beforeEach(async () => {
     await applyMigrations(env.DB);
     // Clear tables before each test to ensure isolation
-    for (const table of ['signals', 'opportunities', 'leads', 'landing_pages', 'discovery_candidates']) {
+    for (const table of ['signals', 'opportunities', 'leads', 'landing_pages', 'discovery_candidates', 'market_tests']) {
       await env.DB.exec(`DELETE FROM ${table}`);
     }
     repo = new D1Repo(env.DB);
@@ -318,5 +319,99 @@ describe('D1Repo', () => {
       expect(stats.opportunities).toBe(1);
       expect(stats.leads).toBe(1);
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Market test repo
+// ---------------------------------------------------------------------------
+
+describe('D1Repo — market tests', () => {
+  let repo: D1Repo;
+
+  beforeEach(async () => {
+    await applyMigrations(env.DB);
+    for (const table of ['signals', 'opportunities', 'leads', 'landing_pages', 'discovery_candidates', 'market_tests']) {
+      await env.DB.exec(`DELETE FROM ${table}`);
+    }
+    repo = new D1Repo(env.DB);
+  });
+
+  it('createMarketTest inserts a pending row', async () => {
+    const now = new Date().toISOString();
+    await repo.createMarketTest('mt-1', 'dentists in pain', now);
+    const test = await repo.getMarketTest('mt-1');
+    expect(test).not.toBeNull();
+    expect(test!.id).toBe('mt-1');
+    expect(test!.description).toBe('dentists in pain');
+    expect(test!.status).toBe('pending');
+    expect(test!.generated_config).toBeNull();
+    expect(test!.result).toBeNull();
+  });
+
+  it('claimMarketTest transitions pending → running and returns true', async () => {
+    const now = new Date().toISOString();
+    await repo.createMarketTest('mt-2', 'lawyers', now);
+    const claimed = await repo.claimMarketTest('mt-2', now);
+    expect(claimed).toBe(true);
+    const test = await repo.getMarketTest('mt-2');
+    expect(test!.status).toBe('running');
+  });
+
+  it('claimMarketTest returns false when status is not pending', async () => {
+    const now = new Date().toISOString();
+    await repo.createMarketTest('mt-3', 'architects', now);
+    await repo.claimMarketTest('mt-3', now);
+    const second = await repo.claimMarketTest('mt-3', now);
+    expect(second).toBe(false);
+  });
+
+  it('updateMarketTestConfig stores the generated config JSON', async () => {
+    const now = new Date().toISOString();
+    await repo.createMarketTest('mt-4', 'professors', now);
+    await repo.claimMarketTest('mt-4', now);
+    const config = {
+      label: 'Docente universitario',
+      queries: ['ANECA acreditación problema'],
+      keywords: ['aneca', 'sexenios'],
+      salary_mean: 42000,
+      income_tier: 'medium_high' as const,
+      has_deadline: false,
+    };
+    await repo.updateMarketTestConfig('mt-4', config, now);
+    const test = await repo.getMarketTest('mt-4');
+    expect(test!.generated_config).toEqual(config);
+  });
+
+  it('completeMarketTest stores result and sets status=done', async () => {
+    const now = new Date().toISOString();
+    await repo.createMarketTest('mt-5', 'dentists', now);
+    await repo.claimMarketTest('mt-5', now);
+    const result = {
+      score: 7.5,
+      breakdown: { dolor: 8, capacidad_pago: 7, volumen: 5, competencia: 5, urgencia: 10 },
+      pain_summary: 'verifactu software pain',
+      signal_count: 3,
+      signals: [],
+    };
+    await repo.completeMarketTest('mt-5', result, now);
+    const test = await repo.getMarketTest('mt-5');
+    expect(test!.status).toBe('done');
+    expect(test!.result).toEqual(result);
+  });
+
+  it('failMarketTest stores error and sets status=failed', async () => {
+    const now = new Date().toISOString();
+    await repo.createMarketTest('mt-6', 'architects', now);
+    await repo.claimMarketTest('mt-6', now);
+    await repo.failMarketTest('mt-6', 'LLM unavailable', now);
+    const test = await repo.getMarketTest('mt-6');
+    expect(test!.status).toBe('failed');
+    expect(test!.error).toBe('LLM unavailable');
+  });
+
+  it('getMarketTest returns null for unknown id', async () => {
+    const test = await repo.getMarketTest('does-not-exist');
+    expect(test).toBeNull();
   });
 });
