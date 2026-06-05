@@ -1,4 +1,4 @@
-export type SignalSource = 'gnews' | 'local_news';
+export type SignalSource = 'gnews' | 'local_news' | 'reddit' | 'github';
 
 export type OpportunityStatus = 'watching' | 'testing' | 'scaling' | 'killed';
 
@@ -24,6 +24,7 @@ export interface Signal {
   income_tier: string | null;
   signal_strength: number | null;
   has_deadline: boolean;
+  friction_analysis?: string | null;   // JSON FrictionProfile; null = not yet analyzed
 }
 
 export interface Opportunity {
@@ -130,4 +131,24 @@ export interface MarketTest {
   error: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export type ProblemType =
+  | 'regulation' | 'process' | 'software'
+  | 'cost' | 'time' | 'complexity' | 'unknown';
+
+export type PainFrequency =
+  | 'daily' | 'weekly' | 'monthly'
+  | 'yearly' | 'one-time' | 'unknown';
+
+export interface FrictionProfile {
+  problem_type: ProblemType;
+  intensity: number;           // 0–10
+  frequency: PainFrequency;
+  workaround: boolean | null;
+  has_solution: boolean | null;
+  regulatory_body: string | null;
+  affected_role: string | null;
+  pain_summary: string;
+  confidence: number;          // 0–1
 }
