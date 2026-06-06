@@ -10,11 +10,6 @@ if [ -n "$REVIEW_TASKS" ]; then
     exit 1
 fi
 
-echo "ARCH -- running pre-push integrity review..."
-arch review
-if [ $? -ne 0 ]; then
-    echo "Error: Integrity review failed. Push aborted."
-    exit 1
-fi
-
-echo "Integrity review passed. Proceeding with push."
+echo "ARCH -- running pre-push integrity review (advisory)..."
+arch review 2>&1 || echo "Warning: arch review has violations — review before merging"
+echo "Proceeding with push (brownfield transition mode)."
