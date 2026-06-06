@@ -9,3 +9,7 @@ node_modules/
 .wrangler/
 *.dev.vars
 .dev.vars
+
+# ARCH — local overrides
+.arch-local
+.arch-local.json

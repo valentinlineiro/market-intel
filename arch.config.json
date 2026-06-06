@@ -1,0 +1,165 @@
+{
+  "version": "1.3.0",
+  "currentSprint": "sprint/v1.3.0-2026-06",
+  "sprintCloseAfterN": 15,
+  "sprintAutoNamePrefix": "sprint/v",
+  "strategies": {
+    "1-code-reasoning": {
+      "M": [
+        {
+          "provider": "claude-code",
+          "model": "sonnet"
+        },
+        {
+          "provider": "gemini",
+          "model": "pro"
+        }
+      ],
+      "L": [
+        {
+          "provider": "claude-code",
+          "model": "opus"
+        },
+        {
+          "provider": "gemini",
+          "model": "pro"
+        }
+      ]
+    },
+    "2-code-generation": {
+      "M": [
+        {
+          "provider": "claude-code",
+          "model": "sonnet"
+        },
+        {
+          "provider": "gemini",
+          "model": "flash"
+        },
+        {
+          "provider": "ollama",
+          "model": "qwen2.5-coder:7b"
+        }
+      ]
+    },
+    "default": {
+      "XS": [
+        {
+          "provider": "ollama",
+          "model": "qwen2.5-coder:1.5b"
+        },
+        {
+          "provider": "gemini",
+          "model": "flash"
+        }
+      ],
+      "S": [
+        {
+          "provider": "claude-code",
+          "model": "haiku"
+        },
+        {
+          "provider": "gemini",
+          "model": "flash"
+        }
+      ],
+      "M": [
+        {
+          "provider": "claude-code",
+          "model": "sonnet"
+        },
+        {
+          "provider": "gemini",
+          "model": "pro"
+        }
+      ],
+      "L": [
+        {
+          "provider": "claude-code",
+          "model": "opus"
+        },
+        {
+          "provider": "gemini",
+          "model": "pro"
+        }
+      ]
+    }
+  },
+  "governance": {
+    "conductEveryN": 5,
+    "batchWritingTasks": false,
+    "execTimeoutMinutes": 10,
+    "negativeConstraints": [
+      "No new dependencies for tasks smaller than M without explicit justification",
+      "No modifying protectedPaths without a preceding ADR",
+      "No major architectural changes without an approved ADR"
+    ],
+    "protectedPaths": [
+      "docs/adr/",
+      "arch.config.json"
+    ],
+    "hanseiSinceTaskId": 1
+  },
+  "muri": {
+    "XS": {
+      "turns": 5,
+      "cost": 0.05
+    },
+    "S": {
+      "turns": 15,
+      "cost": 0.15
+    },
+    "M": {
+      "turns": 40,
+      "cost": 0.5
+    },
+    "L": {
+      "turns": 100,
+      "cost": 2
+    }
+  },
+  "paths": {
+    "tasks": "docs/tasks",
+    "archive": "docs/archive",
+    "guidelines": "docs/guidelines",
+    "agents": "docs/agents",
+    "refinement": "docs/refinement",
+    "adr": "docs/adr"
+  },
+  "clis": [
+    {
+      "name": "claude",
+      "bin": "claude",
+      "template": "claude -p \"{prompt}\" --dangerously-skip-permissions"
+    },
+    {
+      "name": "gemini",
+      "bin": "gemini",
+      "template": "gemini -p \"{prompt}\" -y"
+    }
+  ],
+  "providers": [
+    {
+      "name": "claude-code",
+      "type": "bridge",
+      "bin": "claude",
+      "template": "claude -p \"{prompt}\" --dangerously-skip-permissions"
+    },
+    {
+      "name": "gemini",
+      "type": "bridge",
+      "bin": "gemini",
+      "template": "gemini -p \"{prompt}\" -y"
+    },
+    {
+      "name": "ollama",
+      "type": "native",
+      "endpoint": "http://127.0.0.1:11434/v1",
+      "apiKey": "ollama"
+    }
+  ],
+  "_stackHint": "Node.js / TypeScript",
+  "_testCommand": "npm test",
+  "_buildCommand": "npm run build",
+  "archProfile": "minimal"
+}

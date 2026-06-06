@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# ARCH pre-commit hook
+# Runs arch review --scope delta on staged changes
+
+echo "ARCH -- checking staged changes..."
+arch review --scope delta
+if [ $? -ne 0 ]; then
+    echo "Error: Staged changes violate ARCH integrity."
+    exit 1
+fi
