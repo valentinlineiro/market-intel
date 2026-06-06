@@ -38,7 +38,7 @@ import { EmailNotifier } from './infrastructure/notify.js';
 import type { SendEmail } from './infrastructure/notify.js';
 import { collectGnews } from './infrastructure/collectors/gnews.js';
 import { collectLocalNews } from './infrastructure/collectors/local_news.js';
-import { collectGitHub } from './infrastructure/collectors/github.js';
+import { collectStackOverflow } from './infrastructure/collectors/stackoverflow.js';
 import type { Signal } from './domain/types.js';
 import { runCollect } from './application/collect.js';
 import { runScore } from './application/score.js';
@@ -346,7 +346,17 @@ const scheduled: ExportedHandlerScheduledHandler<Env> = async (_event, env, ctx)
       }
       return all;
     };
-    const fresh = await runCollect(d1repo, [gnewsCollector, localNewsCollector, githubCollector]);
+    const soCollector = async () => {
+      const all: Signal[] = [];
+      for (const [segment, sc] of Object.entries(cfg.collectors.gnews.segments)) {
+        // Use segment keywords as SO tags where possible; fallback to keyword search
+        const tags = sc.keywords.slice(0, 3);
+        const signals = await collectStackOverflow(sc.keywords, tags, segment, '');
+        all.push(...signals);
+      }
+      return all;
+    };
+    const fresh = await runCollect(d1repo, [gnewsCollector, localNewsCollector, githubCollector, soCollector]);
     await analyzeFriction(fresh, llm, d1repo);
 
     // Score

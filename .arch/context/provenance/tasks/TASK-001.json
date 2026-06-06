@@ -1,0 +1,41 @@
+{
+  "commitCount": 2,
+  "commitRefOverflow": false,
+  "lastCommitDate": "2026-06-06T18:04:48+00:00",
+  "recentCommitRefs": [
+    "c8db309",
+    "e345b05"
+  ],
+  "touchedFrequency": {
+    ".arch/causal-signal.jsonl": 1,
+    ".arch/chronicle.jsonl": 1,
+    ".arch/context-index.json": 1,
+    ".arch/context/change-tracker.json": 1,
+    ".arch/context/derived/guideline-failure-links.json": 1,
+    ".arch/context/derived/heuristic/keyword-links.json": 1,
+    ".arch/context/provenance/adr-task-links.json": 1,
+    ".arch/context/schema-version.json": 1,
+    ".arch/focus-ledger.jsonl": 1,
+    ".arch/reflect-breach-log.jsonl": 1,
+    ".arch/sprint-state.json": 1,
+    ".arch/status-projection.json": 1,
+    ".githooks/commit-msg": 1,
+    ".githooks/pre-commit": 1,
+    ".githooks/pre-push": 1,
+    ".gitignore": 1,
+    "ARCH.md": 1,
+    "arch.config.json": 1,
+    "docs/.arch-batch-queue.json": 1,
+    "docs/EVENTS.md": 1,
+    "docs/INBOX.md": 1,
+    "docs/TASK-FORMAT.md": 1,
+    "docs/archive/.gitkeep": 1,
+    "docs/archive/TASK-001.md": 1,
+    "docs/tasks/.gitkeep": 1,
+    "docs/tasks/TASK-001.md": 2,
+    "docs/tasks/TASK-002.md": 1,
+    "docs/tasks/TASK-003.md": 1,
+    "docs/tasks/TASK-004.md": 1,
+    "docs/tasks/TASK-005.md": 1
+  }
+}
