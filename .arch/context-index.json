@@ -1,7 +1,7 @@
 {
   "adrTaskLinks": {},
   "adrs": {},
-  "builtAt": "2026-06-06T18:04:51.889Z",
+  "builtAt": "2026-06-06T18:05:37.303Z",
   "failures": {},
   "files": {},
   "guidelineFailureLinks": {},
@@ -46,6 +46,18 @@
         "docs/tasks/TASK-003.md": 1,
         "docs/tasks/TASK-004.md": 1,
         "docs/tasks/TASK-005.md": 1
+      }
+    },
+    "TASK-002": {
+      "commitCount": 1,
+      "commitRefOverflow": false,
+      "lastCommitDate": "2026-06-06T18:05:37+00:00",
+      "recentCommitRefs": [
+        "44c271a"
+      ],
+      "touchedFrequency": {
+        ".arch/focus-ledger.jsonl": 1,
+        "docs/tasks/TASK-002.md": 1
       }
     }
   },
