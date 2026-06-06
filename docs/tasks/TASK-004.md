@@ -1,5 +1,5 @@
 ## TASK-004: improve scoring: embedding clustering to replace flat LLM scoring
-**Meta:** P2 | S | READY | Focus:no | 2-code-generation | claude-code | src/main/infrastructure/worker/application/score.ts
+**Meta:** P2 | S | READY | Focus:yes | 2-code-generation | claude-code | src/main/infrastructure/worker/application/score.ts
 **Actor:** unknown
 **Created-at:** 2026-06-06T10:17:39.122Z
 **Depends:** none
