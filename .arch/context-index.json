@@ -1,7 +1,7 @@
 {
   "adrTaskLinks": {},
   "adrs": {},
-  "builtAt": "2026-06-06T18:16:57.912Z",
+  "builtAt": "2026-06-06T18:19:02.585Z",
   "failures": {},
   "files": {},
   "guidelineFailureLinks": {},
@@ -58,6 +58,36 @@
       "touchedFrequency": {
         ".arch/focus-ledger.jsonl": 1,
         "docs/tasks/TASK-002.md": 1
+      }
+    },
+    "TASK-003": {
+      "commitCount": 3,
+      "commitRefOverflow": false,
+      "lastCommitDate": "2026-06-06T18:18:59+00:00",
+      "recentCommitRefs": [
+        "1590c94",
+        "3c27c47",
+        "596d1e2"
+      ],
+      "touchedFrequency": {
+        ".arch/causal-signal.jsonl": 1,
+        ".arch/chronicle.jsonl": 1,
+        ".githooks/pre-push": 2,
+        "docs/EVENTS.md": 1,
+        "docs/archive/TASK-003.md": 1,
+        "docs/tasks/TASK-003.md": 1
+      }
+    },
+    "TASK-004": {
+      "commitCount": 1,
+      "commitRefOverflow": false,
+      "lastCommitDate": "2026-06-06T18:19:02+00:00",
+      "recentCommitRefs": [
+        "e142b9b"
+      ],
+      "touchedFrequency": {
+        ".arch/focus-ledger.jsonl": 1,
+        "docs/tasks/TASK-004.md": 1
       }
     }
   },
