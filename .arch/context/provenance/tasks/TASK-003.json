@@ -1,0 +1,18 @@
+{
+  "commitCount": 3,
+  "commitRefOverflow": false,
+  "lastCommitDate": "2026-06-06T18:18:59+00:00",
+  "recentCommitRefs": [
+    "1590c94",
+    "3c27c47",
+    "596d1e2"
+  ],
+  "touchedFrequency": {
+    ".arch/causal-signal.jsonl": 1,
+    ".arch/chronicle.jsonl": 1,
+    ".githooks/pre-push": 2,
+    "docs/EVENTS.md": 1,
+    "docs/archive/TASK-003.md": 1,
+    "docs/tasks/TASK-003.md": 1
+  }
+}
