@@ -1,0 +1,2 @@
+{"id":"b0268c60-cfe1-4e43-adec-a8f4ecb50ec6","type":"TASK_STARTED","timestamp":"2026-06-06T18:04:40.620Z","subject":"TASK-001","payload":{"actor":"cli","lockedCommit":"e345b05"}}
+{"id":"4d0e3e48-20a1-44ad-aa1b-8640727667af","type":"TASK_COMPLETED","timestamp":"2026-06-06T18:04:48.190Z","subject":"TASK-001","payload":{}}
