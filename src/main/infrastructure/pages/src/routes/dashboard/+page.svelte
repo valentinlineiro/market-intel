@@ -23,9 +23,14 @@
     try {
       const fd  = new FormData();
       const res = await fetch('?/discover', { method: 'POST', body: fd });
-      const result = deserialize(await res.text()) as { type: string; data?: { success: boolean; count?: number } };
-      discoverStatus = result.type === 'success' && result.data?.success ? `✓ ${result.data?.count ?? 0} sectores` : 'Error';
-      if (result.type === 'success' && result.data?.success) await invalidateAll();
+      const result = deserialize(await res.text()) as { type: string; data?: { success: boolean; count?: number; error?: string } };
+      if (result.type === 'success' && result.data?.success) {
+        discoverStatus = `✓ ${result.data?.count ?? 0} sectores`;
+        await invalidateAll();
+      } else {
+        const detail = result.data?.error ?? (result as Record<string, unknown>).error ?? '';
+        discoverStatus = detail ? `Error (${detail})` : 'Error';
+      }
     } catch {
       discoverStatus = 'Error';
     } finally {
