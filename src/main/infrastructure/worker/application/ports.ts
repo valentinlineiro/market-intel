@@ -1,4 +1,4 @@
-import type { Signal, Opportunity, Lead, DiscoveryCandidate, SegmentConfig, GnewsSegmentConfig, MarketTest, MarketTestResult, FrictionProfile } from '../domain/types.js';
+import type { Signal, Opportunity, Lead, DiscoveryCandidate, SegmentConfig, GnewsSegmentConfig, MarketTest, MarketTestResult, FrictionProfile, CollectorStat } from '../domain/types.js';
 
 export interface ISignalRepo {
   save(signal: Signal): Promise<boolean>;
@@ -46,4 +46,14 @@ export interface IMarketTestRepo {
 export interface Collector {
   id: string;
   collect(): Promise<Signal[]>;
+}
+
+export interface ICollectorHealthRepo {
+  upsertHealth(stat: CollectorStat, runAt: string): Promise<void>;
+  getCollectorHealth(): Promise<Array<{
+    collector_id:  string;
+    last_run_at:   string;
+    signal_count:  number;
+    error:         string | null;
+  }>>;
 }

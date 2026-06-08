@@ -2,6 +2,12 @@ export type SignalSource =
   | 'gnews' | 'local_news' | 'reddit' | 'github' | 'stackoverflow'
   | 'youtube' | 'bluesky' | 'mastodon';
 
+export interface CollectorStat {
+  id:     string;
+  count:  number;
+  error?: string;
+}
+
 export type OpportunityStatus = 'watching' | 'testing' | 'scaling' | 'killed';
 
 export interface ScoreBreakdown {
