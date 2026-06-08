@@ -31,14 +31,14 @@
  *   POST   /public/signup
  */
 
-import { getConfig, setConfig, invalidateCache } from './infrastructure/config.js';
+import { getConfig, setConfig, invalidateCache, DEFAULT_CONFIG } from './infrastructure/config.js';
 import { D1Repo } from './infrastructure/db/d1-repo.js';
 import { LLMChain } from './infrastructure/llm/chain.js';
 import { EmailNotifier } from './infrastructure/notify.js';
 import type { SendEmail } from './infrastructure/notify.js';
 import { collectGitHub } from './infrastructure/collectors/github.js';
 import { buildRegistry } from './infrastructure/collectors/registry.js';
-import type { FrictionProfile } from './domain/types.js';
+import type { Config, FrictionProfile } from './domain/types.js';
 import type { ISignalRepo } from './application/ports.js';
 import { runCollect } from './application/collect.js';
 import { runScore } from './application/score.js';
@@ -141,8 +141,21 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
     return json({ error: 'unauthorized' }, 401);
 
   try {
-    if (path === '/health' && method === 'GET')
-      return json({ status: 'ok', ts: new Date().toISOString() });
+    if (path === '/health' && method === 'GET') {
+      const healthRepo = new D1Repo(env.DB);
+      let last_runs: Record<string, { last_run_at: string; signal_count: number; error: string | null }> = {};
+      try {
+        const rows = await healthRepo.getCollectorHealth();
+        for (const row of rows) {
+          last_runs[row.collector_id] = {
+            last_run_at:   row.last_run_at,
+            signal_count:  row.signal_count,
+            error:         row.error,
+          };
+        }
+      } catch { /* return empty last_runs on D1 error */ }
+      return json({ status: 'ok', ts: new Date().toISOString(), last_runs });
+    }
 
     if (path === '/signals' && method === 'GET')
       return await handleGetSignals(env.DB, url.searchParams);
@@ -247,6 +260,33 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
         url: s.url, excerpt: s.raw_text.slice(0, 100),
       }));
       return json({ signal_count: signals.length, ss_mean: avg, ss_distribution: buckets, top });
+    }
+
+    if (path === '/debug/collect-all' && method === 'GET') {
+      const testCfg: Config = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
+      if (!testCfg.collectors.gnews.segments || !Object.keys(testCfg.collectors.gnews.segments).length) {
+        testCfg.collectors.gnews.segments = {
+          dentista: {
+            label: 'Dentista',
+            queries: ['verifactu dentista'],
+            keywords: ['verifactu', 'hacienda', 'facturación', 'rrsif', 'multa'],
+            salary_mean: 66500,
+            income_tier: 'high',
+            has_deadline: true,
+          },
+        };
+      }
+      const collectors = buildRegistry(testCfg, env);
+      const results: Array<{ id: string; signals: number; error?: string }> = [];
+      for (const c of collectors) {
+        try {
+          const signals = await c.collect();
+          results.push({ id: c.id, signals: signals.length });
+        } catch (e) {
+          results.push({ id: c.id, signals: 0, error: e instanceof Error ? e.message.slice(0, 120) : String(e) });
+        }
+      }
+      return json(results);
     }
 
     if (path === '/debug/friction' && method === 'GET') {
@@ -397,7 +437,11 @@ const scheduled: ExportedHandlerScheduledHandler<Env> = async (_event, env, ctx)
 
     // Collect
     const collectors = buildRegistry(cfg, env);
-    const fresh = await runCollect(d1repo, collectors);
+    const { signals: fresh, stats } = await runCollect(d1repo, collectors);
+    const runAt = new Date().toISOString();
+    for (const stat of stats) {
+      try { await d1repo.upsertHealth(stat, runAt); } catch { /* non-fatal */ }
+    }
     await analyzeFriction(fresh, llm, d1repo);
 
     // Score

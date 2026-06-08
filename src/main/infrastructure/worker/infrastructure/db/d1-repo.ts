@@ -10,6 +10,7 @@ import type {
   MarketTest,
   MarketTestResult,
   FrictionProfile,
+  CollectorStat,
 } from '../../domain/types.js';
 import type {
   ISignalRepo,
@@ -17,6 +18,7 @@ import type {
   ILeadRepo,
   IDiscoveryRepo,
   IMarketTestRepo,
+  ICollectorHealthRepo,
 } from '../../application/ports.js';
 
 // ---------------------------------------------------------------------------
@@ -90,7 +92,7 @@ function rowToLead(r: Record<string, unknown>): Lead {
 // TypeScript does not allow two methods with the same name but different signatures
 // when implementing multiple interfaces.  We satisfy both ISignalRepo.getAll(limit)
 // and IOpportunityRepo.getAll() via overloads.
-export class D1Repo implements ISignalRepo, IOpportunityRepo, ILeadRepo, IDiscoveryRepo, IMarketTestRepo {
+export class D1Repo implements ISignalRepo, IOpportunityRepo, ILeadRepo, IDiscoveryRepo, IMarketTestRepo, ICollectorHealthRepo {
   constructor(private readonly db: D1Database) {}
 
   // ── ISignalRepo ──────────────────────────────────────────────────────────
@@ -543,5 +545,28 @@ export class D1Repo implements ISignalRepo, IOpportunityRepo, ILeadRepo, IDiscov
       created_at: row.created_at,
       updated_at: row.updated_at,
     };
+  }
+
+  // ── ICollectorHealthRepo ─────────────────────────────────────────────────
+
+  async upsertHealth(stat: CollectorStat, runAt: string): Promise<void> {
+    await this.db
+      .prepare(
+        'INSERT OR REPLACE INTO collector_health (collector_id, last_run_at, signal_count, error) VALUES (?, ?, ?, ?)'
+      )
+      .bind(stat.id, runAt, stat.count, stat.error ?? null)
+      .run();
+  }
+
+  async getCollectorHealth(): Promise<Array<{
+    collector_id:  string;
+    last_run_at:   string;
+    signal_count:  number;
+    error:         string | null;
+  }>> {
+    const result = await this.db
+      .prepare('SELECT collector_id, last_run_at, signal_count, error FROM collector_health ORDER BY collector_id')
+      .all<{ collector_id: string; last_run_at: string; signal_count: number; error: string | null }>();
+    return result.results;
   }
 }
