@@ -62,6 +62,4 @@
   </style>
 </svelte:head>
 
-<svelte:element this={"html"} class={$theme === 'light' ? 'light' : ''} />
-
 <slot />

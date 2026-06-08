@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Config } from '$lib/types.js';
   import { cleanSegment } from '$lib/utils.js';
+  import { deserialize } from '$app/forms';
   import TagInput from './TagInput.svelte';
 
   export let config: Config;
@@ -19,9 +20,9 @@
     try {
       const fd = new FormData();
       fd.set('config', JSON.stringify(draft));
-      const res  = await fetch('?/saveConfig', { method: 'POST', body: fd });
-      const data = await res.json() as { success: boolean };
-      if (data.success) {
+      const res    = await fetch('?/saveConfig', { method: 'POST', body: fd });
+      const result = deserialize(await res.text()) as { type: string; data?: { success: boolean } };
+      if (result.type === 'success' && result.data?.success) {
         saveStatus = '✓ Guardado';
         onSave();
       } else {
@@ -208,7 +209,7 @@
             <div class="field"><label>Label</label><input type="text" bind:value={seg.label} /></div>
             <div class="field">
               <label>Queries (una por línea)</label>
-              <textarea rows="3" value={(seg.queries as string[]).join('\n')}
+              <textarea rows="3" value={(seg.queries as string[] ?? []).join('\n')}
                 on:change={(e) => { seg.queries = e.currentTarget.value.split('\n').map((s: string) => s.trim()).filter(Boolean); }}
               ></textarea>
             </div>

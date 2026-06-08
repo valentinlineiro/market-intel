@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Opportunity } from '$lib/types.js';
   import { cleanSegment }     from '$lib/utils.js';
+  import { deserialize }      from '$app/forms';
   import DeployModal          from './DeployModal.svelte';
 
   export let opportunities: Opportunity[];
@@ -29,9 +30,10 @@
     const fd = new FormData();
     fd.set('segment', segment);
     fd.set('status',  newStatus);
-    await fetch('?/changeStatus', { method: 'POST', body: fd });
+    const res    = await fetch('?/changeStatus', { method: 'POST', body: fd });
+    const result = deserialize(await res.text()) as { type: string; data?: { success: boolean } };
     changingStatus = false;
-    onStatusChange();
+    if (result.type === 'success' && result.data?.success) onStatusChange();
   }
 </script>
 

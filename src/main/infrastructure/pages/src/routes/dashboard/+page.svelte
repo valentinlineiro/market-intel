@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { PageData } from './$types';
   import { invalidateAll } from '$app/navigation';
+  import { deserialize }   from '$app/forms';
   import { theme }           from '$lib/theme.js';
   import StatsBar            from '$lib/components/StatsBar.svelte';
   import SectorsGrid         from '$lib/components/SectorsGrid.svelte';
@@ -22,9 +23,9 @@
     try {
       const fd  = new FormData();
       const res = await fetch('?/discover', { method: 'POST', body: fd });
-      const result = await res.json() as { success: boolean; count?: number };
-      discoverStatus = result.success ? `✓ ${result.count ?? 0} sectores` : 'Error';
-      if (result.success) await invalidateAll();
+      const result = deserialize(await res.text()) as { type: string; data?: { success: boolean; count?: number } };
+      discoverStatus = result.type === 'success' && result.data?.success ? `✓ ${result.data?.count ?? 0} sectores` : 'Error';
+      if (result.type === 'success' && result.data?.success) await invalidateAll();
     } catch {
       discoverStatus = 'Error';
     } finally {

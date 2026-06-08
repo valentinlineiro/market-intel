@@ -13,13 +13,16 @@ function createThemeStore() {
   return {
     subscribe,
     toggle() {
-      const next: Theme = (browser ? localStorage.getItem('theme') ?? 'dark' : 'dark') === 'dark' ? 'light' : 'dark';
-      if (browser) localStorage.setItem('theme', next);
+      if (!browser) return;
+      const next: Theme = (localStorage.getItem('theme') ?? 'dark') === 'dark' ? 'light' : 'dark';
+      localStorage.setItem('theme', next);
+      document.documentElement.classList.toggle('light', next === 'light');
       set(next);
     },
     init() {
       if (!browser) return;
       const saved = (localStorage.getItem('theme') as Theme) ?? 'dark';
+      document.documentElement.classList.toggle('light', saved === 'light');
       set(saved);
     },
   };
