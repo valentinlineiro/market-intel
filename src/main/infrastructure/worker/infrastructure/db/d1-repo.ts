@@ -393,6 +393,13 @@ export class D1Repo implements ISignalRepo, IOpportunityRepo, ILeadRepo, IDiscov
 
   // ── Extra methods (used by index.ts routing) ─────────────────────────────
 
+  async updateOpportunityStatus(segment: string, status: string, now: string): Promise<void> {
+    await this.db
+      .prepare('UPDATE opportunities SET status = ?, last_updated = ? WHERE segment = ?')
+      .bind(status, now, segment)
+      .run();
+  }
+
   async updateOpportunityLanding(segment: string, landingUrl: string, status: string, now: string): Promise<void> {
     await this.db.prepare(
       'UPDATE opportunities SET landing_url = ?, status = ?, last_updated = ? WHERE segment = ?'

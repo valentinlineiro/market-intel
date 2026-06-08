@@ -67,7 +67,7 @@ export interface Env {
 
 const CORS = {
   'Access-Control-Allow-Origin':  '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
@@ -171,6 +171,17 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
 
     if (path === '/opportunities' && method === 'POST')
       return await handleUpsertOpportunity(env.DB, await request.json() as Record<string, unknown>);
+
+    const statusMatch = path.match(/^\/opportunities\/([^/]+)\/status$/);
+    if (statusMatch && method === 'PATCH') {
+      const segment = decodeURIComponent(statusMatch[1]);
+      const body = await request.json() as { status?: string };
+      const valid = ['watching', 'testing', 'scaling', 'killed'];
+      if (!body.status || !valid.includes(body.status))
+        return json({ error: 'invalid status' }, 400);
+      await new D1Repo(env.DB).updateOpportunityStatus(segment, body.status, new Date().toISOString());
+      return json({ ok: true });
+    }
 
     if (path === '/stats' && method === 'GET')
       return await handleGetStats(new D1Repo(env.DB));
