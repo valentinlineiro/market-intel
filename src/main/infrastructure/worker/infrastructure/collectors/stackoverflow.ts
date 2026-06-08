@@ -76,12 +76,12 @@ export async function collectStackOverflow(
       location,
       raw_text: q.title + (q.body ? `\n${q.body.slice(0, 500)}` : ''),
       url: q.link,
-      pain_keywords: keywords.filter(kw => text.includes(kw.toLowerCase())).join(','),
+      pain_keywords: keywords.filter(kw => text.includes(kw.toLowerCase())),
       sentiment_score: -0.6, // unanswered questions are inherently frustrated
       salary_mean: null,
       income_tier: null,
       signal_strength: strength,
-      has_deadline: 0,
+      has_deadline: false,
     });
   }
 
