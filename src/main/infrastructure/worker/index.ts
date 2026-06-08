@@ -361,25 +361,31 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
 
     if (path === '/discover' && method === 'POST') {
       if (!env.GROQ_API_KEY && !env.OPENROUTER_API_KEY)
-        return json({ error: 'No LLM key configured (GROQ_API_KEY or OPENROUTER_API_KEY required)' }, 503);
+        return json({ error: 'LLM key not configured' }, 503);
 
-      const cfg = await getConfig(env.DB);
-      const llm = new LLMChain(cfg.llm, env.GROQ_API_KEY, env.OPENROUTER_API_KEY);
-      const notifier = new EmailNotifier(env.EMAIL, cfg.notifications);
+      try {
+        const cfg = await getConfig(env.DB);
+        const discoverCfg = { max_clusters: 10, min_signals: 3, ...(cfg.discover ?? {}) };
+        const llm = new LLMChain(cfg.llm, env.GROQ_API_KEY, env.OPENROUTER_API_KEY);
+        const notifier = new EmailNotifier(env.EMAIL, cfg.notifications);
 
-      // Fetch raw texts from HN Algolia and Google News RSS
-      const texts = await collectDiscoveryTexts();
-      const d1repo = new D1Repo(env.DB);
-      const latestCandidates = await d1repo.getLatestCandidates();
-      const knownSegments = latestCandidates?.candidates.map(c => c.segment) ?? [];
+        const texts = await collectDiscoveryTexts();
+        const d1repo = new D1Repo(env.DB);
+        const latestCandidates = await d1repo.getLatestCandidates();
+        const knownSegments = latestCandidates?.candidates.map(c => c.segment) ?? [];
 
-      const candidates = await runDiscovery(llm, notifier, cfg.discover, texts, knownSegments);
+        const candidates = await runDiscovery(llm, notifier, discoverCfg, texts, knownSegments);
 
-      if (!candidates.length) return json({ run_id: null, candidates: [] });
+        if (!candidates.length) return json({ run_id: null, candidates: [], message: 'No new segments found' });
 
-      const run_id = crypto.randomUUID();
-      await d1repo.saveCandidates(candidates, run_id);
-      return json({ run_id, candidates });
+        const run_id = crypto.randomUUID();
+        await d1repo.saveCandidates(candidates, run_id);
+        return json({ run_id, candidates });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('discover failed:', msg);
+        return json({ error: msg }, 500);
+      }
     }
 
     if (path === '/score' && method === 'POST') {

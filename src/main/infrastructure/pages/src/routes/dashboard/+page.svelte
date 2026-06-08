@@ -14,28 +14,24 @@
   type Tab = 'oportunidades' | 'sectores' | 'leads' | 'config';
   let activeTab: Tab = 'oportunidades';
 
-  let discoverStatus = '';
-  let discovering = false;
+  type DiscoverState = { type: 'idle' } | { type: 'loading' } | { type: 'success'; count: number } | { type: 'error'; message: string };
+  let discoverState: DiscoverState = { type: 'idle' };
 
   async function runDiscovery() {
-    discovering = true;
-    discoverStatus = 'Explorando...';
+    discoverState = { type: 'loading' };
     try {
       const fd  = new FormData();
       const res = await fetch('?/discover', { method: 'POST', body: fd });
-      const result = deserialize(await res.text()) as { type: string; data?: { success: boolean; count?: number; error?: string } };
+      const result = deserialize(await res.text()) as { type: string; data?: { success: boolean; count?: number; error?: string; message?: string } };
       if (result.type === 'success' && result.data?.success) {
-        discoverStatus = `✓ ${result.data?.count ?? 0} sectores`;
+        discoverState = { type: 'success', count: result.data.count ?? 0 };
         await invalidateAll();
       } else {
-        const detail = result.data?.error ?? (result as Record<string, unknown>).error ?? '';
-        discoverStatus = detail ? `Error (${detail})` : 'Error';
+        const msg = result.data?.error ?? 'Error desconocido';
+        discoverState = { type: 'error', message: msg };
       }
-    } catch {
-      discoverStatus = 'Error';
-    } finally {
-      discovering = false;
-      setTimeout(() => { discoverStatus = ''; }, 3000);
+    } catch (e) {
+      discoverState = { type: 'error', message: e instanceof Error ? e.message : 'Error desconocido' };
     }
   }
 </script>
@@ -86,10 +82,25 @@
             Sin exploración reciente
           {/if}
         </span>
-        <button class="btn-primary" on:click={runDiscovery} disabled={discovering}>
-          {discoverStatus || 'Descubrir ahora'}
+        <button class="btn-primary" on:click={runDiscovery} disabled={discoverState.type === 'loading'}>
+          {#if discoverState.type === 'loading'}
+            <span class="spinner"></span> Explorando...
+          {:else}
+            Descubrir ahora
+          {/if}
         </button>
       </div>
+      {#if discoverState.type === 'success'}
+        <div class="discover-banner discover-ok">
+          ✓ {discoverState.count} sectores encontrados
+          <button class="banner-close" on:click={() => discoverState = { type: 'idle' }}>×</button>
+        </div>
+      {:else if discoverState.type === 'error'}
+        <div class="discover-banner discover-err">
+          {discoverState.message}
+          <button class="banner-close" on:click={() => discoverState = { type: 'idle' }}>×</button>
+        </div>
+      {/if}
       <SectorsGrid discovery={data.discovery} />
     {:else if activeTab === 'leads'}
       <LeadsTable bySegment={data.leads.by_segment} total={data.leads.total} />
@@ -116,4 +127,10 @@
   .section-ts { font-size: 0.7rem; color: var(--text-muted); }
   .btn-primary { padding: 7px 14px; background: var(--accent); color: #fff; border: none; border-radius: 6px; font-size: 0.75rem; font-weight: 600; cursor: pointer; white-space: nowrap; }
   .btn-primary:disabled { opacity: 0.5; }
+  .spinner { display: inline-block; width: 10px; height: 10px; border: 2px solid rgba(255,255,255,0.4); border-top-color: #fff; border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; margin-right: 4px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .discover-banner { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border-radius: 8px; font-size: 0.78rem; margin-bottom: 12px; }
+  .discover-ok  { background: var(--accent-bg); color: var(--accent); }
+  .discover-err { background: var(--red-bg); color: var(--red); }
+  .banner-close { background: none; border: none; cursor: pointer; font-size: 1rem; color: inherit; padding: 0 0 0 8px; line-height: 1; }
 </style>

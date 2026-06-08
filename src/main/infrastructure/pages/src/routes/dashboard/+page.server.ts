@@ -54,9 +54,9 @@ export const actions: Actions = {
   discover: async ({ platform }) => {
     const env = (platform as App.Platform).env;
     const res = await workerFetch(`${env.WORKER_URL.replace(/\/$/, '')}/discover`, env, { method: 'POST', body: '{}' });
-    if (!res.ok) return { success: false, error: `${res.status}` };
-    const data = await res.json() as { run_id: string; candidates: unknown[] };
-    return { success: true, count: data.candidates?.length ?? 0 };
+    const data = await res.json() as { run_id?: string; candidates?: unknown[]; error?: string; message?: string };
+    if (!res.ok) return { success: false, error: data.error ?? `Error ${res.status}` };
+    return { success: true, count: data.candidates?.length ?? 0, message: data.message };
   },
 
   deploy: async ({ request, platform }) => {
