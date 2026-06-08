@@ -34,6 +34,10 @@ const VALID_PROFILE: FrictionProfile = {
   confidence:      0.9,
 };
 
+function asBatch(...profiles: Array<{ profile: FrictionProfile; idx: number }>): string {
+  return JSON.stringify(profiles.map(p => ({ ...p.profile, index: p.idx })));
+}
+
 function makeLlm(response: string): ILLMProvider {
   return { complete: vi.fn().mockResolvedValue(response) };
 }
@@ -61,7 +65,7 @@ function makeRepo(): TrackingRepo {
 describe('analyzeFriction', () => {
   it('enriches github signal and calls updateFriction with computed quality', async () => {
     const repo = makeRepo();
-    await analyzeFriction([makeSignal()], makeLlm(JSON.stringify(VALID_PROFILE)), repo);
+    await analyzeFriction([makeSignal()], makeLlm(asBatch({ profile: VALID_PROFILE, idx: 0 })), repo);
 
     expect(repo.calls).toHaveLength(1);
     // quality = (8/10) * (0.6 + 0.4 * 0.9) = 0.8 * 0.96 = 0.768
@@ -80,7 +84,7 @@ describe('analyzeFriction', () => {
   it('analyzes gnews signal at ss >= 0.35', async () => {
     const repo = makeRepo();
     const signal = makeSignal({ source: 'gnews', signal_strength: 0.40 });
-    await analyzeFriction([signal], makeLlm(JSON.stringify(VALID_PROFILE)), repo);
+    await analyzeFriction([signal], makeLlm(asBatch({ profile: VALID_PROFILE, idx: 0 })), repo);
     expect(repo.calls).toHaveLength(1);
   });
 
@@ -104,9 +108,17 @@ describe('analyzeFriction', () => {
     expect(repo.calls).toHaveLength(0);
   });
 
+  it('handles LLM returning a bare object instead of an array (single-signal batch)', async () => {
+    const repo = makeRepo();
+    const bare = JSON.stringify({ ...VALID_PROFILE, index: 0 });
+    await analyzeFriction([makeSignal()], makeLlm(bare), repo);
+    expect(repo.calls).toHaveLength(1);
+    expect(repo.calls[0]!.strength).toBeCloseTo(0.768, 2);
+  });
+
   it('handles LLM preamble before JSON', async () => {
     const repo = makeRepo();
-    const llm = makeLlm(`Aquí el análisis: ${JSON.stringify(VALID_PROFILE)}`);
+    const llm = makeLlm(`Aquí el análisis: ${asBatch({ profile: VALID_PROFILE, idx: 0 })}`);
     await analyzeFriction([makeSignal()], llm, repo);
     expect(repo.calls).toHaveLength(1);
   });
@@ -115,7 +127,7 @@ describe('analyzeFriction', () => {
     const repo = makeRepo();
     const s1 = makeSignal({ id: 'sig-1' });
     const s2 = makeSignal({ id: 'sig-2', signal_strength: 0.5 });
-    await analyzeFriction([s1, s2], makeLlm(JSON.stringify(VALID_PROFILE)), repo);
+    await analyzeFriction([s1, s2], makeLlm(asBatch({ profile: VALID_PROFILE, idx: 0 }, { profile: VALID_PROFILE, idx: 1 })), repo);
     expect(repo.calls).toHaveLength(2);
     expect(repo.calls.map(c => c.id)).toContain('sig-1');
     expect(repo.calls.map(c => c.id)).toContain('sig-2');

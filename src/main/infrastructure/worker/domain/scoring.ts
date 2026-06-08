@@ -1,4 +1,5 @@
 import type { Signal, Opportunity, ScoreBreakdown, SegmentConfig } from './types.js';
+import { clusterSignals, parseKeywords } from './cluster.js';
 import {
   SCORE_WEIGHTS,
   KILL_SCORE_THRESHOLD,
@@ -50,6 +51,7 @@ export function volumeScore(discoveryScore: number): number {
 /**
  * Returns [dolorScore, painSummary].
  * Considers signals from the last 30 days; weights recent (< 7 days) higher.
+ * Clusters near-duplicate signals so repeated noise doesn't inflate the score.
  */
 export function dolorScore(signals: Signal[], now: number = Date.now()): [number, string] {
   const cutoff = now - 30 * 86400000;
@@ -57,36 +59,35 @@ export function dolorScore(signals: Signal[], now: number = Date.now()): [number
   const recent = signals.filter(s => new Date(s.collected_at).getTime() > cutoff);
   if (!recent.length) return [0, ''];
 
+  const clusters = clusterSignals(recent);
+
   let weighted = 0;
   let totalW = 0;
   const allKw: string[] = [];
 
-  for (const s of recent) {
-    let kws: string[] = [];
-    try {
-      const raw = s.pain_keywords;
-      kws = Array.isArray(raw) ? raw : (JSON.parse(raw as unknown as string) as string[]);
-    } catch {
-      kws = [];
-    }
-    // Specificity heuristic (stopgap until friction detection):
-    // 0 keywords → noise, discount heavily (0.3x)
-    // 1 keyword  → plausible but weak (0.7x)
-    // 2+ keywords → meaningful signal (1.0x)
-    const specificity = kws.length === 0 ? 0.3 : kws.length === 1 ? 0.7 : 1.0;
+  for (const cluster of clusters) {
+    for (const s of cluster) {
+      const kws = parseKeywords(s);
+      // Specificity heuristic:
+      // 0 keywords → noise, discount heavily (0.3x)
+      // 1 keyword  → plausible but weak (0.7x)
+      // 2+ keywords → meaningful signal (1.0x)
+      const specificity = kws.length === 0 ? 0.3 : kws.length === 1 ? 0.7 : 1.0;
 
-    const w = new Date(s.collected_at).getTime() > weekAgo ? 2.0 : 1.0;
-    weighted += (s.signal_strength ?? 0) * w * specificity;
-    totalW += w;
-    allKw.push(...kws);
+      const w = new Date(s.collected_at).getTime() > weekAgo ? 2.0 : 1.0;
+      weighted += (s.signal_strength ?? 0) * w * specificity;
+      totalW += w;
+      allKw.push(...kws);
+    }
   }
 
   // Base score: average signal quality (0-10)
   const intensity = totalW ? (weighted / totalW) * 10 : 0;
 
-  // Volume bonus: diminishing returns, max +2.0 for high volume.
+  // Volume bonus uses cluster count (unique topics) to avoid rewarding duplicate signals.
   // x/(x+5) caps at 1.0 asymptotically → * 2 = max 2 extra points.
-  const volBonus = Math.min(recent.length / (recent.length + 5), 1.0) * 2;
+  const uniqueTopics = clusters.length;
+  const volBonus = Math.min(uniqueTopics / (uniqueTopics + 5), 1.0) * 2;
 
   const dolor = Math.min(
     Math.round((intensity + volBonus) * 100) / 100,

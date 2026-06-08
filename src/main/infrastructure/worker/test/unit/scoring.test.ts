@@ -189,6 +189,29 @@ describe("dolorScore", () => {
     const [genScore] = dolorScore(generic, now);
     expect(specScore).toBeGreaterThan(genScore);
   });
+
+  it('duplicate signals cluster into one topic — volume bonus capped at unique topics', () => {
+    const now = FIXED_NOW;
+    const ts = new Date(now - 86400000).toISOString();
+    // 20 identical signals — only 1 unique topic
+    const dupes: Signal[] = Array.from({ length: 20 }, (_, i) => ({
+      id: `d${i}`, source: 'gnews' as const, collected_at: ts,
+      segment: 'test', location: null, raw_text: 'same', url: `http://ex.com/${i}`,
+      pain_keywords: ['verifactu', 'hacienda'], sentiment_score: null, salary_mean: null,
+      income_tier: null, signal_strength: 0.8, has_deadline: false,
+    }));
+    // 4 signals on 4 distinct topics
+    const diverse: Signal[] = [
+      { id: 't1', source: 'gnews', collected_at: ts, segment: 'test', location: null, raw_text: 'a', url: 'u1', pain_keywords: ['aneca', 'sexenio'], sentiment_score: null, salary_mean: null, income_tier: null, signal_strength: 0.8, has_deadline: false },
+      { id: 't2', source: 'gnews', collected_at: ts, segment: 'test', location: null, raw_text: 'b', url: 'u2', pain_keywords: ['lexnet', 'irpf'], sentiment_score: null, salary_mean: null, income_tier: null, signal_strength: 0.8, has_deadline: false },
+      { id: 't3', source: 'gnews', collected_at: ts, segment: 'test', location: null, raw_text: 'c', url: 'u3', pain_keywords: ['multa', 'burocracia'], sentiment_score: null, salary_mean: null, income_tier: null, signal_strength: 0.8, has_deadline: false },
+      { id: 't4', source: 'gnews', collected_at: ts, segment: 'test', location: null, raw_text: 'd', url: 'u4', pain_keywords: ['licencia', 'obras'], sentiment_score: null, salary_mean: null, income_tier: null, signal_strength: 0.8, has_deadline: false },
+    ];
+    const [dupeScore] = dolorScore(dupes, now);
+    const [diverseScore] = dolorScore(diverse, now);
+    // 4 unique topics should outscore 20 duplicate signals at same signal_strength
+    expect(diverseScore).toBeGreaterThan(dupeScore);
+  });
 });
 
 // ---------------------------------------------------------------------------

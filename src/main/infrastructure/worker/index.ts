@@ -39,7 +39,9 @@ import type { SendEmail } from './infrastructure/notify.js';
 import { collectGnews } from './infrastructure/collectors/gnews.js';
 import { collectLocalNews } from './infrastructure/collectors/local_news.js';
 import { collectStackOverflow } from './infrastructure/collectors/stackoverflow.js';
-import type { Signal } from './domain/types.js';
+import { collectGitHub } from './infrastructure/collectors/github.js';
+import type { Signal, FrictionProfile } from './domain/types.js';
+import type { ISignalRepo } from './application/ports.js';
 import { runCollect } from './application/collect.js';
 import { runScore } from './application/score.js';
 import { runDiscovery } from './application/discover.js';
@@ -246,6 +248,65 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
         url: s.url, excerpt: s.raw_text.slice(0, 100),
       }));
       return json({ signal_count: signals.length, ss_mean: avg, ss_distribution: buckets, top });
+    }
+
+    if (path === '/debug/friction' && method === 'GET') {
+      const keywords = [
+        'verifactu', 'hacienda', 'facturación', 'rrsif', 'multa', 'gestión clínica',
+        'aneca', 'acreditación', 'sexenio', 'docentia', 'plaza',
+        'lexnet', 'irpf', 'turno oficio', 'honorarios',
+        'visado colegial', 'licencia obras', 'burocracia', 'certificado energético',
+      ];
+      const signals = await collectGitHub(keywords, 'debug', env.GITHUB_TOKEN);
+      const before = signals.map(s => ({ url: s.url, ss: s.signal_strength ?? 0 }));
+
+      const llm = new LLMChain(
+        { provider: 'groq', model: 'llama-3.1-8b-instant', temperature: 0.1, max_tokens: 5000 },
+        env.GROQ_API_KEY,
+        env.OPENROUTER_API_KEY,
+      );
+
+      const captured: Array<{ id: string; strength: number; profile: FrictionProfile }> = [];
+      const memRepo: ISignalRepo = {
+        save: async () => true,
+        get: async () => [],
+        getAll: async () => [],
+        count: async () => 0,
+        updateFriction: async (id, strength, profile) => { captured.push({ id, strength, profile }); },
+      };
+
+      await analyzeFriction(signals, llm, memRepo);
+
+      const signalMap = new Map(signals.map(s => [s.id, s]));
+      const enriched = captured.map(c => {
+        const s = signalMap.get(c.id);
+        return {
+          url: s?.url ?? c.id,
+          before: s?.signal_strength ?? 0,
+          after: c.strength,
+          profile: c.profile,
+        };
+      });
+
+      const afterAll = enriched.map(e => e.after);
+      const afterBuckets: Record<string, number> = { '0-0.2': 0, '0.2-0.4': 0, '0.4-0.6': 0, '0.6-0.8': 0, '0.8-1.0': 0 };
+      for (const v of afterAll) {
+        if (v < 0.2) afterBuckets['0-0.2']++;
+        else if (v < 0.4) afterBuckets['0.2-0.4']++;
+        else if (v < 0.6) afterBuckets['0.4-0.6']++;
+        else if (v < 0.8) afterBuckets['0.6-0.8']++;
+        else afterBuckets['0.8-1.0']++;
+      }
+      const afterMean = afterAll.length ? (afterAll.reduce((a, b) => a + b, 0) / afterAll.length) : 0;
+      return json({
+        total_signals: signals.length,
+        enriched_count: enriched.length,
+        batch_count: Math.ceil(signals.length / 10),
+        before_mean: before.length ? (before.reduce((a, b) => a + b.ss, 0) / before.length) : 0,
+        after_mean: afterMean,
+        after_distribution: afterBuckets,
+        detail: enriched.sort((a, b) => b.after - a.after).slice(0, 10),
+      });
     }
 
     if (path === '/discover' && method === 'POST') {
