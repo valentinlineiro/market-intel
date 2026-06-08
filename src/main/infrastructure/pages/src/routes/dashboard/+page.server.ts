@@ -22,20 +22,22 @@ export const load: PageServerLoad = async ({ platform }) => {
   const env  = (platform as App.Platform).env;
   const base = env.WORKER_URL.replace(/\/$/, '');
 
-  const [statsRes, oppsRes, leadsRes, discoveryRes, configRes] = await Promise.all([
+  const [statsRes, oppsRes, leadsRes, discoveryRes, configRes, healthRes] = await Promise.all([
     fetch(`${base}/public/stats`),
     fetch(`${base}/public/opportunities`),
     fetch(`${base}/public/leads`),
     fetch(`${base}/public/discovery`),
     fetch(`${base}/public/config`),
+    workerFetch(`${base}/health`, env),
   ]);
 
-  const [statsData, oppsData, leadsData, discoveryData, configData] = await Promise.all([
-    safeJson<Stats>(statsRes, { total_signals: 0, total_opportunities: 0, total_leads: 0, top_segment: null }),
+  const [statsData, oppsData, leadsData, discoveryData, configData, healthData] = await Promise.all([
+    safeJson<Stats>(statsRes, { total_signals: 0, total_opportunities: 0, by_segment: {}, top_opportunity: null }),
     safeJson<{ results: Opportunity[] }>(oppsRes, { results: [] }),
     safeJson<{ total: number; by_segment: Record<string, { email: string; captured_at: string }[]> }>(leadsRes, { total: 0, by_segment: {} }),
-    safeJson<DiscoveryResult>(discoveryRes, { candidates: [], discovered_at: null }),
+    safeJson<DiscoveryResult>(discoveryRes, { candidates: [], discovered_at: null, run_id: '' }),
     safeJson<{ config: Config }>(configRes, { config: {} as Config }),
+    safeJson<{ status: string; last_runs: Record<string, { last_run_at: string; signal_count: number; error: string | null }> }>(healthRes, { status: 'error', last_runs: {} }),
   ]);
 
   return {
@@ -44,6 +46,7 @@ export const load: PageServerLoad = async ({ platform }) => {
     leads:         leadsData,
     discovery:     discoveryData,
     config:        configData.config,
+    health:        healthData,
   };
 };
 
@@ -78,6 +81,19 @@ export const actions: Actions = {
       method: 'PUT',
       body: JSON.stringify(config),
     });
+    return { success: res.ok };
+  },
+
+  changeStatus: async ({ request, platform }) => {
+    const env     = (platform as App.Platform).env;
+    const fd      = await request.formData();
+    const segment = fd.get('segment') as string;
+    const status  = fd.get('status') as string;
+    const res = await workerFetch(
+      `${env.WORKER_URL.replace(/\/$/, '')}/opportunities/${encodeURIComponent(segment)}/status`,
+      env,
+      { method: 'PATCH', body: JSON.stringify({ status }) },
+    );
     return { success: res.ok };
   },
 
