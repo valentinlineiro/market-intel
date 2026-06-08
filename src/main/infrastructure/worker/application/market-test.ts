@@ -87,12 +87,16 @@ export async function runMarketTest(
     await repo.updateMarketTestConfig(id, config, now());
 
     const signalRepo = new InMemorySignalRepo();
-    await runCollect(signalRepo, [
+    const { stats } = await runCollect(signalRepo, [
       {
         id: 'gnews',
         collect: () => collectGnews({ 'market-test': config }, ''),
       },
     ]);
+
+    // Check if any collector failed
+    const failedStat = stats.find(s => s.error);
+    if (failedStat) throw new Error(failedStat.error);
 
     const signals = signalRepo.getSignals();
     const [dolor, painSummary] = dolorScore(signals);

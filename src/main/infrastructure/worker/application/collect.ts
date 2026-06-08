@@ -1,17 +1,29 @@
 import type { ISignalRepo, Collector } from './ports.js';
-import type { Signal } from '../domain/types.js';
+import type { Signal, CollectorStat } from '../domain/types.js';
 
 export async function runCollect(
   repo: ISignalRepo,
   collectors: Collector[],
-): Promise<Signal[]> {
+): Promise<{ signals: Signal[]; stats: CollectorStat[] }> {
   const saved: Signal[] = [];
+  const stats: CollectorStat[] = [];
+
   for (const collector of collectors) {
-    const signals = await collector.collect();
-    for (const signal of signals) {
-      const isNew = await repo.save(signal);
-      if (isNew) saved.push(signal);
+    try {
+      const collected = await collector.collect();
+      for (const signal of collected) {
+        const isNew = await repo.save(signal);
+        if (isNew) saved.push(signal);
+      }
+      stats.push({ id: collector.id, count: collected.length });
+    } catch (e) {
+      stats.push({
+        id:    collector.id,
+        count: 0,
+        error: e instanceof Error ? e.message.slice(0, 200) : String(e),
+      });
     }
   }
-  return saved;
+
+  return { signals: saved, stats };
 }
