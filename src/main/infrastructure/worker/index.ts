@@ -417,7 +417,12 @@ const scheduled: ExportedHandlerScheduledHandler<Env> = async (_event, env, ctx)
       }
       return all;
     };
-    const fresh = await runCollect(d1repo, [gnewsCollector, localNewsCollector, githubCollector, soCollector]);
+    const fresh = await runCollect(d1repo, [
+      { id: 'gnews', collect: gnewsCollector },
+      { id: 'local_news', collect: localNewsCollector },
+      { id: 'github', collect: githubCollector },
+      { id: 'stackoverflow', collect: soCollector },
+    ]);
     await analyzeFriction(fresh, llm, d1repo);
 
     // Score
