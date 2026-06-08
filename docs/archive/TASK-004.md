@@ -1,5 +1,5 @@
 ## TASK-004: improve scoring: embedding clustering to replace flat LLM scoring
-**Meta:** P2 | S | DONE | Focus:yes | 2-code-generation | claude-code | src/main/infrastructure/worker/application/score.ts
+**Meta:** P2 | S | DONE | Focus:no | 2-code-generation | claude-code | src/main/infrastructure/worker/application/score.ts
 **Actor:** claude-code
 **Created-at:** 2026-06-06T10:17:39.122Z
 **Closed-at:** 2026-06-08T09:31:00.000Z
@@ -25,3 +25,11 @@
 ### Definition of Done
 - [x] All ACs checked
 - [ ] `arch review` passes
+
+## Hansei
+**Severity:** H1
+**Category:** [SpecDrift]
+**Decision:** Embedding clustering implemented in domain/cluster.ts using Jaccard similarity on signal keywords. clusterSignals() groups signals with similarity > 0.85. dolorScore iterates all cluster members. analyzeFriction batches over one representative per cluster, propagating the friction profile to all members. LLM call count reduced — only one call per cluster, not per signal. 129 tests pass.
+**Constraint:** Jaccard similarity on keywords is a proxy for semantic similarity — not true embeddings. A follow-up can replace with actual embedding vectors from Cloudflare AI Workers if accuracy proves insufficient.
+**Cost:** domain/cluster.ts added. No new external dependencies.
+**Forward Action:** Measure LLM call reduction in production — baseline is N signals × 1 call, new is N clusters × 1 call. If cluster count is still high, raise similarity threshold.
