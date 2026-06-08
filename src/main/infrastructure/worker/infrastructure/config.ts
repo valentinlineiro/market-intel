@@ -134,7 +134,8 @@ export async function getConfig(db: D1Database): Promise<Config> {
     return cachedConfig;
   }
   if (row) {
-    cachedConfig = JSON.parse(row['value'] as string) as Config;
+    const stored = JSON.parse(row['value'] as string) as Partial<Config>;
+    cachedConfig = deepMerge(structuredClone(DEFAULT_CONFIG), stored);
     cachedVersion = row['updated_at'] as string;
     return cachedConfig;
   }

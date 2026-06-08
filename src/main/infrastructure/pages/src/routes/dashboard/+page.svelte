@@ -90,9 +90,11 @@
           {/if}
         </button>
       </div>
-      {#if discoverState.type === 'success'}
+      {#if discoverState.type === 'loading'}
+        <div class="progress-bar"><div class="progress-fill"></div></div>
+      {:else if discoverState.type === 'success'}
         <div class="discover-banner discover-ok">
-          ✓ {discoverState.count} sectores encontrados
+          ✓ {discoverState.count > 0 ? `${discoverState.count} sectores encontrados` : 'Completado — sin segmentos nuevos esta vez'}
           <button class="banner-close" on:click={() => discoverState = { type: 'idle' }}>×</button>
         </div>
       {:else if discoverState.type === 'error'}
@@ -133,4 +135,7 @@
   .discover-ok  { background: var(--accent-bg); color: var(--accent); }
   .discover-err { background: var(--red-bg); color: var(--red); }
   .banner-close { background: none; border: none; cursor: pointer; font-size: 1rem; color: inherit; padding: 0 0 0 8px; line-height: 1; }
+  .progress-bar  { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; margin-bottom: 12px; }
+  .progress-fill { height: 100%; width: 40%; background: var(--accent); border-radius: 2px; animation: progress-slide 1.4s ease-in-out infinite; }
+  @keyframes progress-slide { 0% { transform: translateX(-150%); } 100% { transform: translateX(350%); } }
 </style>
