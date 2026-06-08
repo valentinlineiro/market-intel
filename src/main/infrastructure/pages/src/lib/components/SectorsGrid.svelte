@@ -1,6 +1,10 @@
 <script lang="ts">
   import type { DiscoveryResult } from '$lib/types.js';
   export let discovery: DiscoveryResult;
+
+  function scoreColor(s: number) {
+    return s > 12 ? 'var(--accent)' : s > 6 ? 'var(--amber)' : 'var(--text-muted)';
+  }
 </script>
 
 <div class="grid">
@@ -8,12 +12,12 @@
     <div class="card"><p class="muted">Sin sectores detectados todavía.</p></div>
   {:else}
     {#each discovery.candidates.slice(0, 6) as c}
-      {@const scorePct = Math.min((c.discovery_score ?? 0) / 20, 1)}
-      {@const scoreColor = scorePct > 0.6 ? '#34d399' : scorePct > 0.3 ? '#fbbf24' : '#94a3b8'}
       <div class="card">
         <div class="header">
           <strong>{c.profile}</strong>
-          <span style="color: {scoreColor}; font-weight: 700; font-size: 0.85rem;">{(c.discovery_score ?? 0).toFixed(1)}</span>
+          <span style="color: {scoreColor(c.discovery_score ?? 0)}; font-weight: 700; font-size: 0.85rem;">
+            {(c.discovery_score ?? 0).toFixed(1)}
+          </span>
         </div>
         <p class="pain">{c.pain}</p>
         <div class="chips">
@@ -28,13 +32,13 @@
 </div>
 
 <style>
-  .grid  { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
-  .card  { background: #0f172a; border: 1px solid #1e293b; border-radius: 12px; padding: 20px; }
+  .grid   { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+  .card   { background: var(--bg-card); border: 1px solid var(--border-sub); border-radius: 10px; padding: 16px; }
   .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
-  .header strong { color: #f1f5f9; font-size: 0.9rem; line-height: 1.3; }
-  .pain  { color: #64748b; font-size: 0.8rem; margin-bottom: 10px; line-height: 1.4; }
-  .chips { display: flex; flex-wrap: wrap; gap: 4px; }
-  .chip  { padding: 2px 6px; background: #1e293b; border-radius: 4px; font-size: 0.7rem; color: #64748b; }
-  .meta  { margin-top: 8px; font-size: 0.7rem; color: #334155; }
-  .muted { color: #475569; font-size: 0.875rem; }
+  .header strong { color: var(--text); font-size: 0.88rem; line-height: 1.3; }
+  .pain   { color: var(--text-muted); font-size: 0.78rem; margin-bottom: 10px; line-height: 1.4; }
+  .chips  { display: flex; flex-wrap: wrap; gap: 4px; }
+  .chip   { padding: 2px 6px; background: var(--bg-input); border-radius: 4px; font-size: 0.68rem; color: var(--text-muted); }
+  .meta   { margin-top: 8px; font-size: 0.68rem; color: var(--text-dim); }
+  .muted  { color: var(--text-muted); font-size: 0.85rem; }
 </style>
