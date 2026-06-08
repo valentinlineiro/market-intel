@@ -35,7 +35,7 @@ New file: `infrastructure/collectors/registry.ts`
 export function buildRegistry(cfg: Config, env: Env): Collector[]
 ```
 
-This is the single place where `Env` secrets and `Config` values are bound to collector factories. Every existing collector (`gnews`, `github`, `local_news`, `reddit`, `stackoverflow`) is wired here with zero changes to its own logic.
+This is the single place where `Env` secrets and `Config` values are bound to collector factories. All five existing collectors (`gnews`, `github`, `local_news`, `reddit`, `stackoverflow`) are wired here with zero changes to their own logic.
 
 ### runCollect
 
@@ -84,7 +84,7 @@ No changes to `index.ts`, `collect.ts`, or any other file.
   - `sentiment_score`: keyword-based negative scoring (reuse existing pattern from reddit.ts)
   - `raw_text`: comment text (truncated to 1000 chars)
   - `url`: link to the video (not the individual comment)
-- **Rate limit:** 1 video search (100 units) + comment fetch per video (1 unit/page). Stay within budget with `maxVideos = 5`, `maxCommentsPerVideo = 20`.
+- **Rate limit:** 19 keywords × (1 search @ 100u + 5 videos × 1u comments) ≈ 1 995 units/day — well within the 10 000 free quota. Default: `maxVideos = 5`, `maxCommentsPerVideo = 20`.
 - **Auth:** API key only — no OAuth needed.
 
 ### Bluesky (`collectBluesky`)
@@ -102,7 +102,7 @@ No changes to `index.ts`, `collect.ts`, or any other file.
 ### Mastodon (`collectMastodon`)
 
 - **API:** Public instance search — no auth needed for public posts.
-- **Instances:** `mastodon.social` (general), `social.coop` (workers/freelance), `mastodon.online` — configurable list in `Config`.
+- **Instances:** `mastodon.social` (general), `mastodon.es` (Spanish-speaking) — configurable list in `Config`.
 - **Endpoint:** `GET https://<instance>/api/v2/search?q=<keyword>&type=statuses&limit=20`
 - **Strategy:** Query each instance × each keyword. Deduplicate by URL.
 - **Signal mapping:**
@@ -153,5 +153,4 @@ YOUTUBE_API_KEY?: string;
 ## Out of scope
 
 - LinkedIn, Instagram/Threads, Facebook — all require OAuth or partner API access.
-- Reddit: collector already exists; not migrated to new interface in Phase 1 (it uses a different call signature and is already wired — migrate opportunistically).
 - Collector enable/disable without deploy: intentionally not in scope; static registry is the chosen approach.
