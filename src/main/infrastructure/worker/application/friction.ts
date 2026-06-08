@@ -2,7 +2,7 @@ import type { Signal, FrictionProfile } from '../domain/types.js';
 import type { ILLMProvider, ISignalRepo } from './ports.js';
 import { clusterSignals } from '../domain/cluster.js';
 
-const BATCH_SIZE = 10;
+const BATCH_SIZE = 6;
 
 const BATCH_PROMPT = `Eres un analista de pain points de profesionales. Analiza cada señal y extrae su perfil de fricción.
 
@@ -32,7 +32,7 @@ function shouldAnalyze(signal: Signal): boolean {
 
 function formatBatch(signals: Signal[]): string {
   return signals.map((s, i) =>
-    `[${i}] Fuente: ${s.source}\n    Texto: ${s.raw_text.slice(0, 1000)}`
+    `[${i}] Fuente: ${s.source}\n    Texto: ${s.raw_text.slice(0, 600)}`
   ).join('\n\n');
 }
 
@@ -72,7 +72,7 @@ export async function analyzeFriction(
     const prompt = BATCH_PROMPT.replace('{signals}', formatBatch(batchReps));
 
     try {
-      let raw = await llm.complete(prompt, 500 * batchReps.length);
+      let raw = await llm.complete(prompt, 250 * batchReps.length);
       raw = raw.replace(/^```[\w]*\n?/, '').replace(/\n?```$/, '').trim();
       const entries = extractArray(raw);
       if (!entries) continue;
