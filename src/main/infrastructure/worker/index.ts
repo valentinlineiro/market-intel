@@ -59,6 +59,7 @@ export interface Env {
   GROQ_API_KEY?: string;
   OPENROUTER_API_KEY?: string;
   GITHUB_TOKEN?: string;
+  YOUTUBE_API_KEY?: string;
   EMAIL?: SendEmail;
 }
 

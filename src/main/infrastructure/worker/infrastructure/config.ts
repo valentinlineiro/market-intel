@@ -73,6 +73,24 @@ export const DEFAULT_CONFIG: Config = {
       ],
       pain_keywords: [],
     },
+    reddit: {
+      enabled: true,
+      subreddits: ['es', 'spain', 'preguntaespana', 'autonomos', 'freelance'],
+    },
+    youtube: {
+      enabled: true,
+      max_videos: 5,
+      max_comments_per_video: 20,
+    },
+    bluesky: {
+      enabled: true,
+      max_results: 25,
+    },
+    mastodon: {
+      enabled: true,
+      instances: ['mastodon.social', 'mastodon.es'],
+      max_results: 20,
+    },
   },
   synthesis_segments: {
     dentista: {

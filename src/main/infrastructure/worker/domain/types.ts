@@ -1,4 +1,6 @@
-export type SignalSource = 'gnews' | 'local_news' | 'reddit' | 'github';
+export type SignalSource =
+  | 'gnews' | 'local_news' | 'reddit' | 'github' | 'stackoverflow'
+  | 'youtube' | 'bluesky' | 'mastodon';
 
 export type OpportunityStatus = 'watching' | 'testing' | 'scaling' | 'killed';
 
@@ -109,6 +111,24 @@ export interface Config {
       enabled: boolean;
       feeds: Array<{ url: string; location: string }>;
       pain_keywords: string[];
+    };
+    reddit: {
+      enabled: boolean;
+      subreddits: string[];
+    };
+    youtube: {
+      enabled: boolean;
+      max_videos: number;
+      max_comments_per_video: number;
+    };
+    bluesky: {
+      enabled: boolean;
+      max_results: number;
+    };
+    mastodon: {
+      enabled: boolean;
+      instances: string[];
+      max_results: number;
     };
   };
   synthesis_segments: Record<string, SegmentConfig>;
