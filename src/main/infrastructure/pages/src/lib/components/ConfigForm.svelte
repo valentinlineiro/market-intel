@@ -9,7 +9,7 @@
 
   let draft: Config = structuredClone(config);
   let saveStatus = '';
-  let openSection: string | null = 'scoring';
+  let openSection: string | null = null;
 
   function toggleSection(id: string) {
     openSection = openSection === id ? null : id;
@@ -45,10 +45,10 @@
     return labels[key];
   }
 
-  $: score   = draft.score   as Record<string, unknown>;
-  $: llm     = draft.llm     as Record<string, unknown>;
-  $: discover = draft.discover as Record<string, unknown>;
-  $: notifs  = draft.notifications as Record<string, unknown>;
+  $: score   = (draft.score         ?? {}) as Record<string, unknown>;
+  $: llm     = (draft.llm           ?? {}) as Record<string, unknown>;
+  $: discover = (draft.discover      ?? {}) as Record<string, unknown>;
+  $: notifs  = (draft.notifications  ?? {}) as Record<string, unknown>;
   $: collectors = (draft.collectors ?? {}) as Record<string, Record<string, unknown>>;
   $: gnewsSegments = Object.keys((collectors.gnews?.segments ?? {}) as Record<string, unknown>);
   $: synthSegments = Object.keys(draft.synthesis_segments ?? {});
