@@ -42,3 +42,8 @@ export interface IMarketTestRepo {
   failMarketTest(id: string, error: string, now: string): Promise<void>;
   getMarketTest(id: string): Promise<MarketTest | null>;
 }
+
+export interface Collector {
+  id: string;
+  collect(): Promise<Signal[]>;
+}

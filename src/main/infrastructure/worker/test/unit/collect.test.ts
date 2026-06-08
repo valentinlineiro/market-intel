@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { runCollect } from '../../application/collect.js';
-import type { ISignalRepo } from '../../application/ports.js';
+import type { ISignalRepo, Collector } from '../../application/ports.js';
 import type { Signal, FrictionProfile } from '../../domain/types.js';
 
 function makeSignal(id: string): Signal {
@@ -31,6 +31,10 @@ function makeRepo(saveResult = true): ISignalRepo {
   };
 }
 
+function makeCollector(id: string, signals: Signal[]): Collector {
+  return { id, collect: async () => signals };
+}
+
 describe('runCollect', () => {
   it('returns all newly saved signals from all collectors', async () => {
     const s1 = makeSignal('a');
@@ -38,8 +42,8 @@ describe('runCollect', () => {
     const repo = makeRepo(true);
 
     const result = await runCollect(repo, [
-      async () => [s1],
-      async () => [s2],
+      makeCollector('c1', [s1]),
+      makeCollector('c2', [s2]),
     ]);
 
     expect(result).toHaveLength(2);
@@ -51,14 +55,14 @@ describe('runCollect', () => {
     const s1 = makeSignal('a');
     const repo = makeRepo(false);
 
-    const result = await runCollect(repo, [async () => [s1]]);
+    const result = await runCollect(repo, [makeCollector('c1', [s1])]);
 
     expect(result).toHaveLength(0);
   });
 
   it('returns empty array when no collectors produce signals', async () => {
     const repo = makeRepo(true);
-    const result = await runCollect(repo, [async () => []]);
+    const result = await runCollect(repo, [makeCollector('c1', [])]);
     expect(result).toHaveLength(0);
   });
 });
