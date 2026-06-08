@@ -101,7 +101,7 @@ Existing response extended with `last_runs`:
     "reddit":       { "last_run_at": "2026-06-08T10:00:00Z", "signal_count": 0,  "error": null },
     "bluesky":      { "last_run_at": "2026-06-08T10:00:00Z", "signal_count": 0,  "error": null },
     "mastodon":     { "last_run_at": "2026-06-08T10:00:00Z", "signal_count": 0,  "error": null },
-    "youtube":      { "last_run_at": "2026-06-08T10:00:00Z", "signal_count": 0,  "error": "Missing API key" }
+    "youtube":      { "last_run_at": "2026-06-08T10:00:00Z", "signal_count": 0,  "error": null }
   }
 }
 ```
