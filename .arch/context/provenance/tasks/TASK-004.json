@@ -1,12 +1,25 @@
 {
-  "commitCount": 1,
+  "commitCount": 3,
   "commitRefOverflow": false,
-  "lastCommitDate": "2026-06-06T18:19:02+00:00",
+  "lastCommitDate": "2026-06-08T19:24:45+00:00",
   "recentCommitRefs": [
+    "5b62c94",
+    "bee4c4b",
     "e142b9b"
   ],
   "touchedFrequency": {
+    ".arch/causal-signal.jsonl": 1,
+    ".arch/chronicle.jsonl": 1,
     ".arch/focus-ledger.jsonl": 1,
-    "docs/tasks/TASK-004.md": 1
+    "docs/EVENTS.md": 1,
+    "docs/archive/TASK-004.md": 1,
+    "docs/tasks/TASK-004.md": 2,
+    "src/main/infrastructure/worker/application/friction.ts": 1,
+    "src/main/infrastructure/worker/domain/cluster.ts": 1,
+    "src/main/infrastructure/worker/domain/scoring.ts": 1,
+    "src/main/infrastructure/worker/index.ts": 1,
+    "src/main/infrastructure/worker/test/unit/cluster.test.ts": 1,
+    "src/main/infrastructure/worker/test/unit/friction.test.ts": 1,
+    "src/main/infrastructure/worker/test/unit/scoring.test.ts": 1
   }
 }

@@ -1,15 +1,19 @@
 {
-  "commitCount": 3,
+  "commitCount": 4,
   "commitRefOverflow": false,
-  "lastCommitDate": "2026-06-06T18:18:59+00:00",
+  "lastCommitDate": "2026-06-06T18:19:09+00:00",
   "recentCommitRefs": [
     "1590c94",
     "3c27c47",
+    "479dbc7",
     "596d1e2"
   ],
   "touchedFrequency": {
     ".arch/causal-signal.jsonl": 1,
     ".arch/chronicle.jsonl": 1,
+    ".arch/context/provenance/tasks/TASK-003.json": 1,
+    ".arch/context/provenance/tasks/TASK-004.json": 1,
+    ".arch/reflect-breach-log.jsonl": 1,
     ".githooks/pre-push": 2,
     "docs/EVENTS.md": 1,
     "docs/archive/TASK-003.md": 1,
