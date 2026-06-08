@@ -1,15 +1,18 @@
 <script lang="ts">
   import type { PageData } from './$types';
   import { invalidateAll } from '$app/navigation';
-  import StatGrid           from '$lib/components/StatGrid.svelte';
-  import SectorsGrid        from '$lib/components/SectorsGrid.svelte';
-  import OpportunitiesTable from '$lib/components/OpportunitiesTable.svelte';
-  import LeadsTable         from '$lib/components/LeadsTable.svelte';
-  import SettingsPanel      from '$lib/components/SettingsPanel.svelte';
+  import { theme }           from '$lib/theme.js';
+  import StatsBar            from '$lib/components/StatsBar.svelte';
+  import SectorsGrid         from '$lib/components/SectorsGrid.svelte';
+  import OpportunityList     from '$lib/components/OpportunityList.svelte';
+  import LeadsTable          from '$lib/components/LeadsTable.svelte';
+  import ConfigForm          from '$lib/components/ConfigForm.svelte';
 
   export let data: PageData;
 
-  let settingsOpen = false;
+  type Tab = 'oportunidades' | 'sectores' | 'leads' | 'config';
+  let activeTab: Tab = 'oportunidades';
+
   let discoverStatus = '';
   let discovering = false;
 
@@ -20,14 +23,10 @@
       const fd  = new FormData();
       const res = await fetch('?/discover', { method: 'POST', body: fd });
       const result = await res.json() as { success: boolean; count?: number };
-      if (result.success) {
-        discoverStatus = `✓ ${result.count ?? 0} sectores encontrados`;
-        await invalidateAll();
-      } else {
-        discoverStatus = 'Error al descubrir';
-      }
+      discoverStatus = result.success ? `✓ ${result.count ?? 0} sectores` : 'Error';
+      if (result.success) await invalidateAll();
     } catch {
-      discoverStatus = 'Error al descubrir';
+      discoverStatus = 'Error';
     } finally {
       discovering = false;
       setTimeout(() => { discoverStatus = ''; }, 3000);
@@ -35,74 +34,80 @@
   }
 </script>
 
-<svelte:head><title>Market Intel — Dashboard</title></svelte:head>
+<svelte:head><title>Market Intel</title></svelte:head>
 
-<div class="container">
-  <div class="header">
+<div class="shell">
+  <header>
     <div>
       <div class="title">Market Intel</div>
       <div class="subtitle">Señales de dolor · Cádiz / España</div>
     </div>
-    <form method="POST" action="?/logout" style="display:contents">
-      <button class="btn-sm">Salir</button>
-    </form>
-  </div>
-
-  <h2>Resumen</h2>
-  <div style="margin-bottom:32px">
-    <StatGrid stats={data.stats} />
-  </div>
-
-  <div class="section-header">
-    <h2>Sectores Emergentes</h2>
-    <div style="display:flex;align-items:center;gap:12px;">
-      {#if data.discovery.discovered_at}
-        <span class="ts">
-          Última exploración: hace
-          {Math.round((Date.now() - new Date(data.discovery.discovered_at).getTime()) / 60000)} min
-        </span>
-      {/if}
-      <button class="btn-sm" on:click={runDiscovery} disabled={discovering}>
-        {discoverStatus || 'Descubrir ahora'}
+    <div class="header-actions">
+      <button class="btn-icon" on:click={() => theme.toggle()} title="Cambiar tema">
+        {$theme === 'dark' ? '☀' : '☾'}
       </button>
+      <form method="POST" action="?/logout" style="display:contents">
+        <button class="btn-sm">Salir</button>
+      </form>
     </div>
-  </div>
-  <div style="margin-bottom:32px">
-    <SectorsGrid discovery={data.discovery} />
-  </div>
+  </header>
 
-  <h2>Oportunidades</h2>
-  <div style="margin-bottom:32px">
-    <OpportunitiesTable opportunities={data.opportunities} />
-  </div>
+  <StatsBar
+    totalSignals={data.stats.total_signals ?? 0}
+    opportunities={data.opportunities}
+    health={data.health}
+  />
 
-  <h2>Leads</h2>
-  <div style="margin-bottom:32px">
-    <LeadsTable bySegment={data.leads.by_segment} total={data.leads.total} />
-  </div>
+  <nav class="tabs">
+    {#each [['oportunidades','Oportunidades'],['sectores','Sectores'],['leads','Leads'],['config','Config']] as [id, label]}
+      <button
+        class="tab"
+        class:active={activeTab === id}
+        on:click={() => activeTab = id as Tab}
+      >{label}</button>
+    {/each}
+  </nav>
 
-  <div class="section-header">
-    <h2>Configuración</h2>
-    <button class="btn-sm" on:click={() => settingsOpen = !settingsOpen}>
-      {settingsOpen ? 'Ocultar' : 'Mostrar'}
-    </button>
-  </div>
-  {#if settingsOpen}
-    <div class="card" style="margin-top:16px">
-      <SettingsPanel config={data.config} onSave={() => invalidateAll()} />
-    </div>
-  {/if}
+  <main>
+    {#if activeTab === 'oportunidades'}
+      <OpportunityList opportunities={data.opportunities} onStatusChange={() => invalidateAll()} />
+    {:else if activeTab === 'sectores'}
+      <div class="section-header">
+        <span class="section-ts">
+          {#if data.discovery.discovered_at}
+            Última exploración: {new Intl.DateTimeFormat('es', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(data.discovery.discovered_at))}
+          {:else}
+            Sin exploración reciente
+          {/if}
+        </span>
+        <button class="btn-primary" on:click={runDiscovery} disabled={discovering}>
+          {discoverStatus || 'Descubrir ahora'}
+        </button>
+      </div>
+      <SectorsGrid discovery={data.discovery} />
+    {:else if activeTab === 'leads'}
+      <LeadsTable bySegment={data.leads.by_segment} total={data.leads.total} />
+    {:else if activeTab === 'config'}
+      <ConfigForm config={data.config} onSave={() => invalidateAll()} />
+    {/if}
+  </main>
 </div>
 
 <style>
-  .container { max-width: 1100px; margin: 0 auto; padding: 32px 16px; }
-  h2         { font-size: 0.75rem; font-weight: 600; letter-spacing: 0.1em; color: #475569; text-transform: uppercase; margin-bottom: 16px; }
-  .header    { display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px; }
-  .title     { font-size: 1.5rem; font-weight: 700; color: #f1f5f9; }
-  .subtitle  { font-size: 0.8rem; color: #475569; margin-top: 2px; }
-  .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-  .section-header h2 { margin: 0; }
-  .ts        { font-size: 0.7rem; color: #334155; }
-  .btn-sm    { padding: 6px 14px; background: #1e293b; color: #94a3b8; border: 1px solid #334155; border-radius: 6px; font-size: 0.75rem; cursor: pointer; }
-  .card      { background: #0f172a; border: 1px solid #1e293b; border-radius: 12px; padding: 20px; }
+  .shell   { max-width: 800px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; }
+  header   { display: flex; justify-content: space-between; align-items: center; padding: 16px; background: var(--bg); border-bottom: 1px solid var(--border); }
+  .title   { font-size: 1.1rem; font-weight: 700; color: var(--text); }
+  .subtitle{ font-size: 0.7rem; color: var(--text-muted); margin-top: 1px; }
+  .header-actions { display: flex; align-items: center; gap: 8px; }
+  .btn-icon{ background: none; border: none; font-size: 1rem; cursor: pointer; color: var(--text-sub); padding: 4px 6px; border-radius: 6px; }
+  .btn-icon:hover { background: var(--bg-card); }
+  .btn-sm  { padding: 6px 12px; background: var(--bg-card); color: var(--text-sub); border: 1px solid var(--border); border-radius: 6px; font-size: 0.75rem; cursor: pointer; }
+  .tabs    { display: flex; background: var(--bg); border-bottom: 1px solid var(--border); overflow-x: auto; flex-shrink: 0; }
+  .tab     { flex: 1; min-width: 70px; padding: 10px 4px; background: none; border: none; border-bottom: 2px solid transparent; color: var(--text-dim); font-size: 0.78rem; cursor: pointer; white-space: nowrap; }
+  .tab.active { color: var(--violet); border-bottom-color: var(--violet); font-weight: 600; }
+  main     { flex: 1; padding: 16px; overflow-x: hidden; }
+  .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 8px; }
+  .section-ts { font-size: 0.7rem; color: var(--text-muted); }
+  .btn-primary { padding: 7px 14px; background: var(--accent); color: #fff; border: none; border-radius: 6px; font-size: 0.75rem; font-weight: 600; cursor: pointer; white-space: nowrap; }
+  .btn-primary:disabled { opacity: 0.5; }
 </style>
