@@ -143,7 +143,7 @@
       const fd = new FormData();
       fd.set('segment',   segment);
       fd.set('page_slug', pageSlug);
-      fd.set('html',      finalHtml);
+      if (finalHtml) fd.set('html', finalHtml);
       if (!advancedMode || !htmlModified) fd.set('copy', JSON.stringify(copy));
       const res  = await fetch('?/deploy', { method: 'POST', body: fd });
       const data = await res.json() as { success: boolean; url?: string; error?: string };
@@ -271,7 +271,7 @@
         <button
           class="btn-primary"
           on:click={deploy}
-          disabled={deploying || (advancedMode && htmlModified ? !advancedHtml : !previewHtml)}
+          disabled={deploying || (advancedMode && htmlModified ? !advancedHtml : (!pageSlug || !headline))}
         >Desplegar</button>
         <button class="btn-secondary" on:click={() => { view = 'campaign'; }}>Cancelar</button>
       </div>
