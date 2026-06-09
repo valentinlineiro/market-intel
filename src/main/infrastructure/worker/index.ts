@@ -46,6 +46,7 @@ import { runDiscovery } from './application/discover.js';
 import { analyzeFriction } from './application/friction.js';
 import { synthesizeCopy, buildHtml } from './application/synthesize.js';
 import { runMarketTest } from './application/market-test.js';
+import { computeLeadScore } from './application/lead-score.js';
 
 // ---------------------------------------------------------------------------
 // Env interface
@@ -103,7 +104,10 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
     path === '/public/config' ||
     path.startsWith('/public/landings/')
   );
-  const isPublicPost = method === 'POST' && path === '/public/signup';
+  const isPublicPost = method === 'POST' && (
+    path === '/public/signup' ||
+    path === '/public/signup/price'
+  );
 
   if (isPublicGet || isPublicPost) {
     try {
@@ -127,6 +131,17 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
         if (!body.email || !body.segment)
           return json({ error: 'email and segment required' }, 400);
         await d1repo.saveLead(body.email, body.segment);
+        return json({ ok: true });
+      }
+
+      if (path === '/public/signup/price' && method === 'POST') {
+        const body = await request.json() as { email?: string; segment?: string; price_tier?: string };
+        const validTiers = ['0-10', '10-30', '30-50', '50+'];
+        if (!body.email || !body.segment || !body.price_tier)
+          return json({ error: 'email, segment and price_tier required' }, 400);
+        if (!validTiers.includes(body.price_tier))
+          return json({ error: 'invalid price_tier' }, 400);
+        await d1repo.savePriceTier(body.email, body.segment, body.price_tier);
         return json({ ok: true });
       }
     } catch (err) {
@@ -591,11 +606,30 @@ async function handleGetDiscovery(d1repo: D1Repo): Promise<Response> {
 
 async function handleGetLeads(d1repo: D1Repo, params: URLSearchParams): Promise<Response> {
   const segment = params.get('segment') ?? undefined;
-  const leads = await d1repo.getLeads(segment);
-  const bySegment: Record<string, Array<{ email: string; captured_at: string }>> = {};
+  const [leads, opportunities] = await Promise.all([
+    d1repo.getLeads(segment),
+    d1repo.getAll(),
+  ]);
+  const oppScores = new Map<string, number>(
+    opportunities.map(o => [o.segment, o.score]),
+  );
+  const bySegment: Record<string, Array<{
+    email: string;
+    captured_at: string;
+    price_tier: string | null;
+    lead_score: number;
+  }>> = {};
   for (const r of leads) {
     if (!bySegment[r.segment]) bySegment[r.segment] = [];
-    bySegment[r.segment].push({ email: r.email, captured_at: r.created_at });
+    bySegment[r.segment].push({
+      email:       r.email,
+      captured_at: r.created_at,
+      price_tier:  r.price_tier,
+      lead_score:  computeLeadScore(r.price_tier, r.created_at, oppScores.get(r.segment) ?? null),
+    });
+  }
+  for (const seg of Object.keys(bySegment)) {
+    bySegment[seg].sort((a, b) => b.lead_score - a.lead_score);
   }
   return json({ total: leads.length, by_segment: bySegment });
 }
