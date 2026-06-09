@@ -10,3 +10,10 @@
 
 ## Pending Items
 _No pending items. Run `arch reflect` to populate._
+
+AWAITING_PROMOTION | IDEA-easy-source-addition | 2026-06-09 (missing: candidate-class) — no Decision field set
+AWAITING_PROMOTION | IDEA-scan-forward-action-task-002 | 2026-06-09 (missing: candidate-class) — no Decision field set
+AWAITING_PROMOTION | IDEA-scan-forward-action-task-005 | 2026-06-09 (missing: candidate-class) — no Decision field set
+AWAITING_PROMOTION | IDEA-scan-ungoverned-src-main-infrastructure-worker-applicati | 2026-06-09 (missing: candidate-class) — no Decision field set
+AWAITING_PROMOTION | IDEA-scan-ungoverned-src-main-infrastructure-worker-index-ts | 2026-06-09 (missing: candidate-class) — no Decision field set
+AWAITING_PROMOTION | IDEA-scan-ungoverned-src-main-infrastructure-worker-infrastru | 2026-06-09 (missing: candidate-class) — no Decision field set

@@ -4,9 +4,10 @@
 **Created:** 2026-06-07
 **Source:** codebase-scan (forward-action-mining)
 **Candidate-size:** XS
+**Candidate-class:** 7-operations
 **Depends:** none
 **Mission-class:** documentation
-**Decision:** Pending human review.
+**Decision:** Promote — validate POST /discover end-to-end through SectorsGrid rendering.
 
 ## Evidence
 
@@ -23,3 +24,6 @@ Forward Actions that are never actioned accumulate as silent technical debt — 
 ## Proposed solution
 
 Review this forward action and either: promote to a task if still relevant, or archive this IDEA with a note explaining why it was superseded.
+
+## Decision
+PROMOTE → TASK-007

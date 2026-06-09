@@ -4,9 +4,10 @@
 **Created:** 2026-06-07
 **Source:** codebase-scan (ungoverned-file)
 **Candidate-size:** XS
+**Candidate-class:** 6-writing
 **Depends:** none
 **Mission-class:** bug-fix
-**Decision:** Pending human review.
+**Decision:** Promote — retroactive governance capture for market-test.ts changes.
 
 ## Evidence
 
@@ -21,3 +22,6 @@ High-frequency ungoverned changes to a file mean the work being done on it is in
 ## Proposed solution
 
 Capture a retroactive task describing the accumulated changes to `src/main/infrastructure/worker/application/market-test.ts`. Write a brief Hansei covering what changed and why. This creates a corpus entry without requiring a rewrite of history.
+
+## Decision
+PROMOTE → TASK-010

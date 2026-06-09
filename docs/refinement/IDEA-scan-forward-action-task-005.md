@@ -1,12 +1,12 @@
 # IDEA: Unresolved forward action from TASK-005
 
-**Status:** DRAFT
+**Status:** ARCHIVED
 **Created:** 2026-06-07
 **Source:** codebase-scan (forward-action-mining)
 **Candidate-size:** XS
 **Depends:** none
 **Mission-class:** documentation
-**Decision:** Pending human review.
+**Decision:** No pre-commit hook exists — the `arch --scope` noise is gone. Nothing to fix.
 
 ## Evidence
 

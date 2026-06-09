@@ -1,11 +1,11 @@
 # IDEA: Easy to add sources — collector plugin interface
 
-**Status:** DRAFT
+**Status:** ARCHIVED
 **Created:** 2026-06-06
 **Source:** Friction observed adding StackOverflow collector (TASK-003)
 **Candidate-size:** S
 **Depends:** none
-**Decision:** Pending human review.
+**Decision:** Already implemented — `registry.ts` + `Collector` interface covers all 8 collectors. No action needed.
 
 ## Problem
 
