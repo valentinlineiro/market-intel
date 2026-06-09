@@ -66,6 +66,9 @@ export interface DiscoveryCandidate {
   source_urls: string[];
   raw_signals: string[];
   discovered_at: string;
+  post_count?: number;
+  income_est?: string | null;
+  has_deadline?: boolean;
 }
 
 export interface SegmentConfig {

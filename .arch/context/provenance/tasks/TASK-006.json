@@ -1,16 +1,27 @@
 {
-  "commitCount": 2,
+  "commitCount": 3,
   "commitRefOverflow": false,
-  "lastCommitDate": "2026-06-08T19:24:26+00:00",
+  "lastCommitDate": "2026-06-08T19:25:05+00:00",
   "recentCommitRefs": [
     "8ddfbf8",
+    "b4f942d",
     "f86e8c5"
   ],
   "touchedFrequency": {
     ".arch/causal-signal.jsonl": 1,
     ".arch/chronicle.jsonl": 1,
+    ".arch/context/provenance/tasks/TASK-003.json": 1,
+    ".arch/context/provenance/tasks/TASK-004.json": 1,
+    ".arch/context/provenance/tasks/TASK-006.json": 1,
+    ".arch/reflect-breach-log.jsonl": 1,
     "docs/EVENTS.md": 1,
+    "docs/MISSION.md": 1,
     "docs/archive/TASK-006.md": 1,
+    "docs/refinement/IDEA-scan-forward-action-task-002.md": 1,
+    "docs/refinement/IDEA-scan-forward-action-task-005.md": 1,
+    "docs/refinement/IDEA-scan-ungoverned-src-main-infrastructure-worker-applicati.md": 1,
+    "docs/refinement/IDEA-scan-ungoverned-src-main-infrastructure-worker-index-ts.md": 1,
+    "docs/refinement/IDEA-scan-ungoverned-src-main-infrastructure-worker-infrastru.md": 1,
     "docs/tasks/TASK-006.md": 2
   }
 }

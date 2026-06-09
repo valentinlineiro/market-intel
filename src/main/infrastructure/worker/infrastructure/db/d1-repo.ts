@@ -323,7 +323,10 @@ export class D1Repo implements ISignalRepo, IOpportunityRepo, ILeadRepo, IDiscov
       pain_summary:    r['pain'] as string,
       discovery_score: r['discovery_score'] as number,
       source_urls:     parseJson<string[]>(r['source_urls'], []),
-      raw_signals:     [],
+      raw_signals:     parseJson<string[]>(r['keywords'], []),
+      post_count:      (r['post_count'] as number) ?? 0,
+      income_est:      (r['income_est'] as string | null) ?? null,
+      has_deadline:    Boolean(r['has_deadline']),
       discovered_at:   r['discovered_at'] as string,
     }));
 

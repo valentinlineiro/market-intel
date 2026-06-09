@@ -581,10 +581,10 @@ async function handleGetDiscovery(d1repo: D1Repo): Promise<Response> {
     profile:         c.segment,
     pain:            c.pain_summary,
     keywords:        c.raw_signals,
-    post_count:      0,
+    post_count:      c.post_count ?? 0,
     discovery_score: c.discovery_score,
-    income_est:      null,
-    has_deadline:    false,
+    income_est:      c.income_est ?? null,
+    has_deadline:    c.has_deadline ?? false,
   }));
   return json({ run_id: null, candidates, discovered_at: latest.discovered_at });
 }
