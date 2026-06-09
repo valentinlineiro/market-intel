@@ -120,6 +120,9 @@ function aggregate(clusters: RawCluster[]): DiscoveryCandidate[] {
         Math.round((m.post_count || 1) * (1 + (m.batch_count || 1) * 0.5) * 10) / 10,
       source_urls: [],
       raw_signals: m.keywords || [],
+      post_count:   m.post_count ?? 0,
+      income_est:   m.income_estimate ?? null,
+      has_deadline: m.has_deadline ?? false,
       discovered_at: now,
     }))
     .sort((a, b) => b.discovery_score - a.discovery_score);
