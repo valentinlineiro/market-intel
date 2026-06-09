@@ -36,6 +36,8 @@ export interface Lead {
   email: string;
   segment: string;
   captured_at: string;
+  price_tier: string | null;
+  lead_score: number;
 }
 
 export interface Stats {

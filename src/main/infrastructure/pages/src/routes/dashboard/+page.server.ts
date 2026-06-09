@@ -34,7 +34,7 @@ export const load: PageServerLoad = async ({ platform }) => {
   const [statsData, oppsData, leadsData, discoveryData, configData, healthData] = await Promise.all([
     safeJson<Stats>(statsRes, { total_signals: 0, total_opportunities: 0, by_segment: {}, top_opportunity: null }),
     safeJson<{ results: Opportunity[] }>(oppsRes, { results: [] }),
-    safeJson<{ total: number; by_segment: Record<string, { email: string; captured_at: string }[]> }>(leadsRes, { total: 0, by_segment: {} }),
+    safeJson<{ total: number; by_segment: Record<string, { email: string; captured_at: string; price_tier: string | null; lead_score: number }[]> }>(leadsRes, { total: 0, by_segment: {} }),
     safeJson<DiscoveryResult>(discoveryRes, { candidates: [], discovered_at: null, run_id: '' }),
     safeJson<{ config: Config }>(configRes, { config: {} as Config }),
     safeJson<{ status: string; last_runs: Record<string, { last_run_at: string; signal_count: number; error: string | null }> }>(healthRes, { status: 'error', last_runs: {} }),
