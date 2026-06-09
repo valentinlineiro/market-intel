@@ -1,7 +1,7 @@
 {
   "adrTaskLinks": {},
   "adrs": {},
-  "builtAt": "2026-06-08T19:24:49.414Z",
+  "builtAt": "2026-06-09T08:25:26.769Z",
   "failures": {},
   "files": {},
   "guidelineFailureLinks": {},
@@ -83,20 +83,31 @@
       }
     },
     "TASK-004": {
-      "commitCount": 3,
+      "commitCount": 4,
       "commitRefOverflow": false,
-      "lastCommitDate": "2026-06-08T19:24:45+00:00",
+      "lastCommitDate": "2026-06-08T19:25:05+00:00",
       "recentCommitRefs": [
         "5b62c94",
+        "b4f942d",
         "bee4c4b",
         "e142b9b"
       ],
       "touchedFrequency": {
         ".arch/causal-signal.jsonl": 1,
         ".arch/chronicle.jsonl": 1,
+        ".arch/context/provenance/tasks/TASK-003.json": 1,
+        ".arch/context/provenance/tasks/TASK-004.json": 1,
+        ".arch/context/provenance/tasks/TASK-006.json": 1,
         ".arch/focus-ledger.jsonl": 1,
+        ".arch/reflect-breach-log.jsonl": 1,
         "docs/EVENTS.md": 1,
+        "docs/MISSION.md": 1,
         "docs/archive/TASK-004.md": 1,
+        "docs/refinement/IDEA-scan-forward-action-task-002.md": 1,
+        "docs/refinement/IDEA-scan-forward-action-task-005.md": 1,
+        "docs/refinement/IDEA-scan-ungoverned-src-main-infrastructure-worker-applicati.md": 1,
+        "docs/refinement/IDEA-scan-ungoverned-src-main-infrastructure-worker-index-ts.md": 1,
+        "docs/refinement/IDEA-scan-ungoverned-src-main-infrastructure-worker-infrastru.md": 1,
         "docs/tasks/TASK-004.md": 2,
         "src/main/infrastructure/worker/application/friction.ts": 1,
         "src/main/infrastructure/worker/domain/cluster.ts": 1,
@@ -108,19 +119,76 @@
       }
     },
     "TASK-006": {
-      "commitCount": 2,
+      "commitCount": 3,
       "commitRefOverflow": false,
-      "lastCommitDate": "2026-06-08T19:24:26+00:00",
+      "lastCommitDate": "2026-06-08T19:25:05+00:00",
       "recentCommitRefs": [
         "8ddfbf8",
+        "b4f942d",
         "f86e8c5"
       ],
       "touchedFrequency": {
         ".arch/causal-signal.jsonl": 1,
         ".arch/chronicle.jsonl": 1,
+        ".arch/context/provenance/tasks/TASK-003.json": 1,
+        ".arch/context/provenance/tasks/TASK-004.json": 1,
+        ".arch/context/provenance/tasks/TASK-006.json": 1,
+        ".arch/reflect-breach-log.jsonl": 1,
         "docs/EVENTS.md": 1,
+        "docs/MISSION.md": 1,
         "docs/archive/TASK-006.md": 1,
+        "docs/refinement/IDEA-scan-forward-action-task-002.md": 1,
+        "docs/refinement/IDEA-scan-forward-action-task-005.md": 1,
+        "docs/refinement/IDEA-scan-ungoverned-src-main-infrastructure-worker-applicati.md": 1,
+        "docs/refinement/IDEA-scan-ungoverned-src-main-infrastructure-worker-index-ts.md": 1,
+        "docs/refinement/IDEA-scan-ungoverned-src-main-infrastructure-worker-infrastru.md": 1,
         "docs/tasks/TASK-006.md": 2
+      }
+    },
+    "TASK-007": {
+      "commitCount": 2,
+      "commitRefOverflow": false,
+      "lastCommitDate": "2026-06-09T10:25:26+02:00",
+      "recentCommitRefs": [
+        "3e21e55",
+        "b9c1f8a"
+      ],
+      "touchedFrequency": {
+        ".arch/focus-ledger.jsonl": 1,
+        "docs/tasks/TASK-007.md": 2
+      }
+    },
+    "TASK-008": {
+      "commitCount": 1,
+      "commitRefOverflow": false,
+      "lastCommitDate": "2026-06-09T10:20:05+02:00",
+      "recentCommitRefs": [
+        "d778539"
+      ],
+      "touchedFrequency": {
+        "docs/tasks/TASK-008.md": 1
+      }
+    },
+    "TASK-009": {
+      "commitCount": 1,
+      "commitRefOverflow": false,
+      "lastCommitDate": "2026-06-09T10:20:05+02:00",
+      "recentCommitRefs": [
+        "6d46a2d"
+      ],
+      "touchedFrequency": {
+        "docs/tasks/TASK-009.md": 1
+      }
+    },
+    "TASK-010": {
+      "commitCount": 1,
+      "commitRefOverflow": false,
+      "lastCommitDate": "2026-06-09T10:20:05+02:00",
+      "recentCommitRefs": [
+        "da13406"
+      ],
+      "touchedFrequency": {
+        "docs/tasks/TASK-010.md": 1
       }
     }
   },
