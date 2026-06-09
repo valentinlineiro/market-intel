@@ -62,6 +62,7 @@ export interface Lead {
 
 export interface DiscoveryCandidate {
   segment: string;
+  label: string;
   pain_summary: string;
   discovery_score: number;
   source_urls: string[];

@@ -326,8 +326,12 @@ export class D1Repo implements ISignalRepo, IOpportunityRepo, ILeadRepo, IDiscov
       .bind(latest['run_id'])
       .all<Record<string, unknown>>();
 
-    const candidates: DiscoveryCandidate[] = (results ?? []).map((r) => ({
-      segment:         r['profile'] as string,
+    const candidates: DiscoveryCandidate[] = (results ?? []).map((r) => {
+      const profile = r['profile'] as string;
+      const slug = profile.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 48);
+      return {
+      segment:         slug,
+      label:           profile,
       pain_summary:    r['pain'] as string,
       discovery_score: r['discovery_score'] as number,
       source_urls:     parseJson<string[]>(r['source_urls'], []),
@@ -336,7 +340,8 @@ export class D1Repo implements ISignalRepo, IOpportunityRepo, ILeadRepo, IDiscov
       income_est:      (r['income_est'] as string | null),
       has_deadline:    r['has_deadline'] === 1 || r['has_deadline'] === true,
       discovered_at:   r['discovered_at'] as string,
-    }));
+      };
+    });
 
     return {
       candidates,

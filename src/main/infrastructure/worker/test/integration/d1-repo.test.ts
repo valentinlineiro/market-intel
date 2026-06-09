@@ -263,7 +263,8 @@ describe('D1Repo', () => {
       expect(result).not.toBeNull();
       expect(result!.candidates).toHaveLength(2);
       // Results ordered by discovery_score DESC
-      expect(result!.candidates[0]!.segment).toBe('Fisioterapeuta autónomo');
+      expect(result!.candidates[0]!.segment).toBe('fisioterapeuta_aut_nomo');
+      expect(result!.candidates[0]!.label).toBe('Fisioterapeuta autónomo');
       expect(result!.candidates[0]!.pain_summary).toBe('Burocracia con seguros médicos');
       expect(result!.discovered_at).toBeTruthy();
     });
