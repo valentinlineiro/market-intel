@@ -117,7 +117,13 @@ export function buildHtml(
     input[type=email] { flex: 1; min-width: 220px; padding: 14px 18px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #f1f5f9; font-size: 1rem; }
     button { padding: 14px 28px; background: #3b82f6; color: white; border: none; border-radius: 8px; font-size: 1rem; font-weight: 600; cursor: pointer; white-space: nowrap; }
     button:hover { background: #2563eb; }
-    .success { display: none; color: #22c55e; margin-top: 16px; font-weight: 600; }
+    .price-step { display: none; margin-top: 24px; }
+    .price-step p { color: #94a3b8; margin-bottom: 16px; font-size: 0.95rem; }
+    .price-step strong { color: #f1f5f9; }
+    .tiers { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+    .tier { padding: 10px 20px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #94a3b8; font-size: 0.9rem; cursor: pointer; transition: border-color .15s, color .15s; }
+    .tier:hover { border-color: #3b82f6; color: #f1f5f9; }
+    .confirmed { display: none; color: #22c55e; margin-top: 20px; font-weight: 600; font-size: 1rem; }
   </style>
 </head>
 <body>
@@ -125,20 +131,50 @@ export function buildHtml(
     <h1>${escHtml(headline)}</h1>
     <p class="subtitle">${escHtml(subheadline)}</p>
     <div class="benefits">${painPointsHtml}</div>
-    <form id="form" action="/signup" method="POST">
-      <input type="hidden" name="segment" value="${escHtml(segment)}">
-      <input type="email" name="email" placeholder="tu@email.com" required>
+    <form id="form">
+      <input type="hidden" id="segment" value="${escHtml(segment)}">
+      <input type="email" id="email" placeholder="tu@email.com" required>
       <button type="submit">${escHtml(cta)}</button>
     </form>
-    <p class="success" id="ok">✓ Apuntado. Te avisamos primero.</p>
+    <div class="price-step" id="price-step">
+      <strong>¡Apuntado!</strong>
+      <p>Una última pregunta: ¿cuánto pagarías al mes por una solución?</p>
+      <div class="tiers">
+        <button class="tier" data-tier="0-10">€0–10</button>
+        <button class="tier" data-tier="10-30">€10–30</button>
+        <button class="tier" data-tier="30-50">€30–50</button>
+        <button class="tier" data-tier="50+">€50+</button>
+      </div>
+    </div>
+    <p class="confirmed" id="confirmed">✓ Gracias. Te avisamos primero.</p>
   </div>
   <script>
-    document.getElementById('form').addEventListener('submit', async e => {
+    var seg = document.getElementById('segment').value;
+    var email = '';
+
+    document.getElementById('form').addEventListener('submit', async function(e) {
       e.preventDefault();
-      const fd = new FormData(e.target);
-      await fetch('/signup', {method:'POST', body: new URLSearchParams(fd)});
+      email = document.getElementById('email').value;
+      await fetch('/public/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email, segment: seg }),
+      });
       e.target.style.display = 'none';
-      document.getElementById('ok').style.display = 'block';
+      document.getElementById('price-step').style.display = 'block';
+    });
+
+    document.querySelectorAll('.tier').forEach(function(btn) {
+      btn.addEventListener('click', async function() {
+        var tier = this.getAttribute('data-tier');
+        await fetch('/public/signup/price', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: email, segment: seg, price_tier: tier }),
+        });
+        document.getElementById('price-step').style.display = 'none';
+        document.getElementById('confirmed').style.display = 'block';
+      });
     });
   </script>
 </body>
