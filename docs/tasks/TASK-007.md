@@ -1,5 +1,5 @@
 ## TASK-007: Unresolved forward action from TASK-002
-**Meta:** P3 | S | READY | Focus:no | 2-code-generation | local | docs/
+**Meta:** P3 | S | READY | Focus:yes | 2-code-generation | local | docs/
 **Depends:** none
 
 ### Acceptance Criteria
