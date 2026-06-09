@@ -120,8 +120,12 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
       if (path === '/public/opportunities') return await handleGetOpportunities(env.DB, url.searchParams);
 
       if (path.startsWith('/public/landings/')) {
-        const segment = path.slice('/public/landings/'.length);
-        const html = await d1repo.getLandingHtml(segment);
+        const rest = path.slice('/public/landings/'.length);
+        const slashIdx = rest.indexOf('/');
+        const segment  = slashIdx === -1 ? rest : rest.slice(0, slashIdx);
+        const pageSlug = slashIdx === -1 ? 'index' : rest.slice(slashIdx + 1);
+        if (!segment) return new Response('Not Found', { status: 404 });
+        const html = await d1repo.getLandingHtml(segment, pageSlug);
         if (!html) return new Response('Not Found', { status: 404 });
         return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html' } });
       }
@@ -241,18 +245,52 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
     }
 
     if (path === '/deploy' && method === 'POST') {
-      const body = await request.json() as { segment?: string; html?: string; copy?: { headline?: string } & Record<string, unknown> };
-      const { segment } = body;
+      const body = await request.json() as {
+        segment?: string;
+        page_slug?: string;
+        html?: string;
+        copy?: { headline?: string; subheadline?: string; pain_points?: string[]; cta?: string };
+      };
+      const { segment, page_slug = 'index' } = body;
       if (!segment) return json({ error: 'segment required' }, 400);
-      const html = body.html ?? (body.copy ? buildHtml(segment, body.copy as unknown as Parameters<typeof buildHtml>[1]) : null);
+      const copy = body.copy ?? null;
+      const html = body.html ?? (copy ? buildHtml(segment, copy as Parameters<typeof buildHtml>[1]) : null);
       if (!html) return json({ error: 'html or copy required' }, 400);
-      const now  = new Date().toISOString();
-      const title = typeof copy.headline === 'string' ? copy.headline : segment;
+      const now   = new Date().toISOString();
+      const title = copy?.headline ?? segment;
       const d1repo = new D1Repo(env.DB);
-      await d1repo.saveLanding(segment, html, title);
-      const landingUrl = `https://market-intel.pages.dev/landings/${segment}`;
+      await d1repo.saveLanding(segment, page_slug, html, copy as Parameters<typeof d1repo.saveLanding>[3], title);
+      const landingUrl = page_slug === 'index'
+        ? `https://market-intel.pages.dev/landings/${segment}`
+        : `https://market-intel.pages.dev/landings/${segment}/${page_slug}`;
       await d1repo.updateOpportunityLanding(segment, landingUrl, 'testing', now);
       return json({ url: landingUrl });
+    }
+
+    if (path === '/render' && method === 'POST') {
+      const { segment, copy } = await request.json() as {
+        segment?: string;
+        copy?: Parameters<typeof buildHtml>[1];
+      };
+      if (!segment || !copy) return json({ error: 'segment and copy required' }, 400);
+      return json({ html: buildHtml(segment, copy) });
+    }
+
+    const pagesMatch = path.match(/^\/pages\/([^/]+)$/);
+    if (pagesMatch && method === 'GET') {
+      const segment = decodeURIComponent(pagesMatch[1]);
+      const d1repo = new D1Repo(env.DB);
+      const pages = await d1repo.listLandingPages(segment);
+      return json({ pages });
+    }
+
+    const pageDeleteMatch = path.match(/^\/pages\/([^/]+)\/([^/]+)$/);
+    if (pageDeleteMatch && method === 'DELETE') {
+      const segment  = decodeURIComponent(pageDeleteMatch[1]);
+      const pageSlug = decodeURIComponent(pageDeleteMatch[2]);
+      const d1repo = new D1Repo(env.DB);
+      await d1repo.deleteLandingPage(segment, pageSlug);
+      return json({ ok: true });
     }
 
     if (path === '/discovery/candidates' && method === 'POST') {
