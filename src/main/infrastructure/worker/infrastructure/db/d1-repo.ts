@@ -78,10 +78,11 @@ function rowToOpportunity(r: Record<string, unknown>): Opportunity {
 
 function rowToLead(r: Record<string, unknown>): Lead {
   return {
-    id:          String(r['id'] as number),
-    email:       r['email'] as string,
-    segment:     r['segment'] as string,
-    created_at:  (r['captured_at'] as string) ?? (r['created_at'] as string),
+    id:         String(r['id'] as number),
+    email:      r['email'] as string,
+    segment:    r['segment'] as string,
+    created_at: (r['captured_at'] as string) ?? (r['created_at'] as string),
+    price_tier: (r['price_tier'] as string | null) ?? null,
   };
 }
 
@@ -251,17 +252,24 @@ export class D1Repo implements ISignalRepo, IOpportunityRepo, ILeadRepo, IDiscov
       .run();
   }
 
+  async savePriceTier(email: string, segment: string, priceTier: string): Promise<void> {
+    await this.db
+      .prepare('UPDATE leads SET price_tier = ? WHERE email = ? AND segment = ?')
+      .bind(priceTier, email, segment)
+      .run();
+  }
+
   async getLeads(segment?: string): Promise<Lead[]> {
     const { results } = segment
       ? await this.db
           .prepare(
-            'SELECT id, email, segment, captured_at FROM leads WHERE segment = ? ORDER BY captured_at DESC LIMIT 200',
+            'SELECT id, email, segment, captured_at, price_tier FROM leads WHERE segment = ? ORDER BY captured_at DESC LIMIT 200',
           )
           .bind(segment)
           .all<Record<string, unknown>>()
       : await this.db
           .prepare(
-            'SELECT id, email, segment, captured_at FROM leads ORDER BY captured_at DESC LIMIT 200',
+            'SELECT id, email, segment, captured_at, price_tier FROM leads ORDER BY captured_at DESC LIMIT 200',
           )
           .all<Record<string, unknown>>();
     return (results ?? []).map(rowToLead);
