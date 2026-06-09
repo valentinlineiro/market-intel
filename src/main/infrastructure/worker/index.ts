@@ -219,8 +219,21 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
       if (!env.GROQ_API_KEY && !env.OPENROUTER_API_KEY)
         return json({ error: 'No LLM key configured (GROQ_API_KEY or OPENROUTER_API_KEY required)' }, 503);
       const cfg = await getConfig(env.DB);
-      const segmentConfig = cfg.synthesis_segments[segment];
-      if (!segmentConfig) return json({ error: `segment '${segment}' not found in synthesis_segments` }, 404);
+      let segmentConfig = cfg.synthesis_segments[segment];
+      if (!segmentConfig) {
+        const d1repo = new D1Repo(env.DB);
+        const discovery = await d1repo.getLatestCandidates();
+        const candidate = discovery?.candidates.find(c => c.segment === segment);
+        if (!candidate) return json({ error: `segment '${segment}' not found` }, 404);
+        segmentConfig = {
+          key:             segment,
+          label:           segment.replace(/_/g, ' '),
+          keywords:        candidate.raw_signals ?? [],
+          income_tier:     candidate.income_est ?? 'medium',
+          has_deadline:    candidate.has_deadline ?? false,
+          discovery_score: candidate.discovery_score,
+        };
+      }
       const llm = new LLMChain(cfg.llm, env.GROQ_API_KEY, env.OPENROUTER_API_KEY);
       const copy = await synthesizeCopy(segment, segmentConfig, llm);
       return json({ segment, copy });

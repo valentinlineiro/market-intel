@@ -20,9 +20,10 @@
       headline    = copy.headline    ?? '';
       subheadline = copy.subheadline ?? '';
       cta         = copy.cta         ?? '';
-      status   = 'Revisa y edita el copy antes de deployar.';
+      status = 'Revisa y edita el copy antes de deployar.';
     } catch (e) {
-      status = `Error: ${(e as Error).message}`;
+      copy = { headline: '', subheadline: '', cta: '', pain_points: [] };
+      status = `LLM no disponible — escribe el copy manualmente.`;
     }
   }
 
