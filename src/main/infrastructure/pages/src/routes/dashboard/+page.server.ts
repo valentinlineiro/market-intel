@@ -63,10 +63,13 @@ export const actions: Actions = {
     const env      = (platform as App.Platform).env;
     const formData = await request.formData();
     const segment  = formData.get('segment') as string;
-    const copy     = JSON.parse(formData.get('copy') as string);
+    const rawHtml  = formData.get('html') as string | null;
+    const body     = rawHtml
+      ? { segment, html: rawHtml }
+      : { segment, copy: JSON.parse(formData.get('copy') as string) };
     const res = await workerFetch(`${env.WORKER_URL.replace(/\/$/, '')}/deploy`, env, {
       method: 'POST',
-      body: JSON.stringify({ segment, copy }),
+      body: JSON.stringify(body),
     });
     if (!res.ok) return { success: false, error: `${res.status}` };
     const data = await res.json() as { url: string };

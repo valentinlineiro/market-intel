@@ -88,7 +88,7 @@
                 <a href={o.landing_url} target="_blank" class="btn-action btn-outline">Ver landing</a>
               {/if}
               <button class="btn-action btn-primary" on:click={() => deploySegment = o.segment}>
-                {o.landing_url ? 'Regenerar' : 'Deploy'}
+                {o.landing_url ? 'Regenerar' : 'Desplegar'}
               </button>
               <select
                 class="status-select"

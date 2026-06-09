@@ -33,7 +33,7 @@
             </td>
             <td>
               <button class="btn-sm" on:click={() => deploySegment = o.segment}>
-                {o.landing_url ? 'Regenerar' : 'Deploy'}
+                {o.landing_url ? 'Regenerar' : 'Desplegar'}
               </button>
             </td>
           </tr>

@@ -236,13 +236,16 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
       }
       const llm = new LLMChain(cfg.llm, env.GROQ_API_KEY, env.OPENROUTER_API_KEY);
       const copy = await synthesizeCopy(segment, segmentConfig, llm);
-      return json({ segment, copy });
+      const html = buildHtml(segment, copy);
+      return json({ segment, copy, html });
     }
 
     if (path === '/deploy' && method === 'POST') {
-      const { segment, copy } = await request.json() as { segment?: string; copy?: { headline?: string } & Record<string, unknown> };
-      if (!segment || !copy) return json({ error: 'segment and copy required' }, 400);
-      const html = buildHtml(segment, copy as unknown as Parameters<typeof buildHtml>[1]);
+      const body = await request.json() as { segment?: string; html?: string; copy?: { headline?: string } & Record<string, unknown> };
+      const { segment } = body;
+      if (!segment) return json({ error: 'segment required' }, 400);
+      const html = body.html ?? (body.copy ? buildHtml(segment, body.copy as unknown as Parameters<typeof buildHtml>[1]) : null);
+      if (!html) return json({ error: 'html or copy required' }, 400);
       const now  = new Date().toISOString();
       const title = typeof copy.headline === 'string' ? copy.headline : segment;
       const d1repo = new D1Repo(env.DB);
