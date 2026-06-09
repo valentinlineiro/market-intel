@@ -86,8 +86,11 @@
       cta         = result.copy.cta;
       previewHtml = result.html;
       status      = 'Edita la página y despliégala.';
-    } catch {
-      status = 'LLM no disponible — escribe el copy manualmente.';
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      status = msg.includes('404')
+        ? 'Segmento sin datos de señales — escribe el copy manualmente.'
+        : 'LLM no disponible — escribe el copy manualmente.';
     }
   }
 
