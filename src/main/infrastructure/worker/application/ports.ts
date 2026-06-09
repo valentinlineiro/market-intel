@@ -17,6 +17,7 @@ export interface IOpportunityRepo {
 
 export interface ILeadRepo {
   saveLead(email: string, segment: string): Promise<void>;
+  savePriceTier(email: string, segment: string, priceTier: string): Promise<void>;
   getLeads(segment?: string): Promise<Lead[]>;
 }
 

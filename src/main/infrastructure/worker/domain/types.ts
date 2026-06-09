@@ -57,6 +57,7 @@ export interface Lead {
   email: string;
   segment: string;
   created_at: string;
+  price_tier: string | null;
 }
 
 export interface DiscoveryCandidate {
