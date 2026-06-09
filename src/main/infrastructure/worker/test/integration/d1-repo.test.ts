@@ -60,7 +60,7 @@ async function applyMigrations(db: D1Database): Promise<void> {
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_signals_url_seg ON signals(url, segment)`,
     `CREATE TABLE IF NOT EXISTS opportunities (id TEXT PRIMARY KEY, segment TEXT NOT NULL, pain_summary TEXT, score REAL, score_breakdown TEXT, signal_ids TEXT, signal_count INTEGER DEFAULT 0, first_seen TEXT, last_updated TEXT, status TEXT DEFAULT 'watching', landing_url TEXT, emails_captured INTEGER DEFAULT 0, validation_deadline TEXT, alerted_at TEXT)`,
     `CREATE TABLE IF NOT EXISTS leads (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT NOT NULL, segment TEXT NOT NULL, captured_at TEXT NOT NULL, ip TEXT, ua TEXT, price_tier TEXT, UNIQUE(email, segment))`,
-    `CREATE TABLE IF NOT EXISTS landing_pages (segment TEXT PRIMARY KEY, html TEXT NOT NULL, title TEXT, deployed_at TEXT NOT NULL)`,
+    `CREATE TABLE IF NOT EXISTS landing_pages (segment TEXT NOT NULL, page_slug TEXT NOT NULL DEFAULT 'index', html TEXT NOT NULL, copy TEXT, title TEXT, deployed_at TEXT NOT NULL, PRIMARY KEY (segment, page_slug))`,
     `CREATE TABLE IF NOT EXISTS discovery_candidates (id INTEGER PRIMARY KEY AUTOINCREMENT, profile TEXT NOT NULL, pain TEXT NOT NULL, keywords TEXT NOT NULL, source_urls TEXT NOT NULL DEFAULT '[]', post_count INTEGER DEFAULT 0, discovery_score REAL DEFAULT 0, income_est TEXT, has_deadline INTEGER DEFAULT 0, source TEXT DEFAULT 'reddit', run_id TEXT NOT NULL, discovered_at TEXT NOT NULL)`,
     `CREATE TABLE IF NOT EXISTS market_tests (id TEXT PRIMARY KEY, description TEXT NOT NULL, generated_config TEXT, status TEXT NOT NULL DEFAULT 'pending', result TEXT, error TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
   ];

@@ -445,24 +445,55 @@ export class D1Repo implements ISignalRepo, IOpportunityRepo, ILeadRepo, IDiscov
     );
   }
 
-  async getLandingHtml(segment: string): Promise<string | null> {
+  async getLandingHtml(segment: string, pageSlug = 'index'): Promise<string | null> {
     const row = await this.db
-      .prepare('SELECT html FROM landing_pages WHERE segment = ?')
-      .bind(segment)
+      .prepare('SELECT html FROM landing_pages WHERE segment = ? AND page_slug = ?')
+      .bind(segment, pageSlug)
       .first<Record<string, unknown>>();
     return row ? (row['html'] as string) : null;
   }
 
-  async saveLanding(segment: string, html: string, title: string): Promise<void> {
+  async listLandingPages(segment: string): Promise<Array<{
+    page_slug: string;
+    title: string | null;
+    deployed_at: string;
+    copy: { headline: string; subheadline: string; pain_points: string[]; cta: string } | null;
+  }>> {
+    const { results } = await this.db
+      .prepare('SELECT page_slug, title, deployed_at, copy FROM landing_pages WHERE segment = ? ORDER BY deployed_at DESC')
+      .bind(segment)
+      .all<Record<string, unknown>>();
+    return (results ?? []).map(r => ({
+      page_slug:   r['page_slug'] as string,
+      title:       (r['title'] as string | null) ?? null,
+      deployed_at: r['deployed_at'] as string,
+      copy:        r['copy'] ? JSON.parse(r['copy'] as string) : null,
+    }));
+  }
+
+  async deleteLandingPage(segment: string, pageSlug: string): Promise<void> {
+    await this.db
+      .prepare('DELETE FROM landing_pages WHERE segment = ? AND page_slug = ?')
+      .bind(segment, pageSlug)
+      .run();
+  }
+
+  async saveLanding(
+    segment: string,
+    pageSlug: string,
+    html: string,
+    copy: { headline: string; subheadline: string; pain_points: string[]; cta: string } | null,
+    title: string,
+  ): Promise<void> {
     const now = new Date().toISOString();
     await this.db
       .prepare(`
-        INSERT INTO landing_pages (segment, html, title, deployed_at)
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT(segment) DO UPDATE SET
-          html=excluded.html, title=excluded.title, deployed_at=excluded.deployed_at
+        INSERT INTO landing_pages (segment, page_slug, html, copy, title, deployed_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(segment, page_slug) DO UPDATE SET
+          html=excluded.html, copy=excluded.copy, title=excluded.title, deployed_at=excluded.deployed_at
       `)
-      .bind(segment, html, title, now)
+      .bind(segment, pageSlug, html, copy ? JSON.stringify(copy) : null, title, now)
       .run();
   }
 
