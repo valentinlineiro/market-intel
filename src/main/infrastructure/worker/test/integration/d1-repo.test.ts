@@ -317,14 +317,62 @@ describe('D1Repo', () => {
 
   describe('Extra methods', () => {
     it('saveLanding then getLandingHtml returns html', async () => {
-      await repo.saveLanding('dentista', '<html>test</html>', 'https://example.com/dentista');
-      const html = await repo.getLandingHtml('dentista');
-      expect(html).toBe('<html>test</html>');
+      await repo.saveLanding('seg1', 'index', '<h1>test</h1>', null, 'Test');
+      const html = await repo.getLandingHtml('seg1');
+      expect(html).toBe('<h1>test</h1>');
     });
 
     it('getLandingHtml returns null for unknown segment', async () => {
       const html = await repo.getLandingHtml('unknown-segment');
       expect(html).toBeNull();
+    });
+
+    it('getLandingHtml with explicit slug returns correct page', async () => {
+      await repo.saveLanding('seg2', 'precios', '<h1>precios</h1>', null, 'Precios');
+      const html = await repo.getLandingHtml('seg2', 'precios');
+      expect(html).toBe('<h1>precios</h1>');
+      const missing = await repo.getLandingHtml('seg2', 'index');
+      expect(missing).toBeNull();
+    });
+
+    it('listLandingPages returns all pages for a segment', async () => {
+      const copy = { headline: 'H', subheadline: 'S', pain_points: ['p1'], cta: 'CTA' };
+      await repo.saveLanding('seg3', 'index', '<h1>index</h1>', copy, 'Index');
+      await repo.saveLanding('seg3', 'about', '<h1>about</h1>', null, 'About');
+      const pages = await repo.listLandingPages('seg3');
+      expect(pages).toHaveLength(2);
+      const index = pages.find(p => p.page_slug === 'index');
+      expect(index?.copy?.headline).toBe('H');
+      expect(index?.copy?.pain_points).toEqual(['p1']);
+      const about = pages.find(p => p.page_slug === 'about');
+      expect(about?.copy).toBeNull();
+    });
+
+    it('listLandingPages returns empty array for unknown segment', async () => {
+      const pages = await repo.listLandingPages('no-such-segment');
+      expect(pages).toHaveLength(0);
+    });
+
+    it('deleteLandingPage removes the row, others unaffected', async () => {
+      await repo.saveLanding('seg4', 'index', '<h1>i</h1>', null, 'i');
+      await repo.saveLanding('seg4', 'about', '<h1>a</h1>', null, 'a');
+      await repo.deleteLandingPage('seg4', 'index');
+      const pages = await repo.listLandingPages('seg4');
+      expect(pages).toHaveLength(1);
+      expect(pages[0]!.page_slug).toBe('about');
+    });
+
+    it('deleteLandingPage on non-existent row is a no-op', async () => {
+      await expect(
+        repo.deleteLandingPage('no-seg', 'no-slug')
+      ).resolves.toBeUndefined();
+    });
+
+    it('saveLanding upserts on duplicate segment+slug', async () => {
+      await repo.saveLanding('seg5', 'index', '<h1>v1</h1>', null, 'v1');
+      await repo.saveLanding('seg5', 'index', '<h1>v2</h1>', null, 'v2');
+      const html = await repo.getLandingHtml('seg5', 'index');
+      expect(html).toBe('<h1>v2</h1>');
     });
 
     it('getStats returns counts across tables', async () => {
