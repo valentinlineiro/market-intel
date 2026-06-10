@@ -47,6 +47,7 @@ import { analyzeFriction } from './application/friction.js';
 import { synthesizeCopy, buildHtml } from './application/synthesize.js';
 import { runMarketTest } from './application/market-test.js';
 import { computeLeadScore } from './application/lead-score.js';
+import { runSnapshot, runGapScore } from './application/gap.js';
 
 // ---------------------------------------------------------------------------
 // Env interface
@@ -539,6 +540,11 @@ const scheduled: ExportedHandlerScheduledHandler<Env> = async (_event, env, ctx)
       cfg.score.min_score,
       cfg.score.dry_run,
     );
+
+    // Gap snapshot + scoring (runs after runScore so gap_score is fresh)
+    await runSnapshot(d1repo, d1repo);
+    await runGapScore(d1repo, d1repo);
+    console.log('[cron] gap snapshot + scoring done');
   })());
 };
 
