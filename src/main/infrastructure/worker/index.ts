@@ -392,6 +392,7 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
         getAll: async () => [],
         count: async () => 0,
         updateFriction: async (id, strength, profile) => { captured.push({ id, strength, profile }); },
+        getSignalsInRange: async () => [],
       };
 
       await analyzeFriction(signals, llm, memRepo);
@@ -434,7 +435,7 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
 
       try {
         const cfg = await getConfig(env.DB);
-        const discoverCfg = { max_clusters: 10, min_signals: 3, ...(cfg.discover ?? {}) };
+        const discoverCfg = { ...(cfg.discover ?? { max_clusters: 10, min_signals: 3 }) };
         const llm = new LLMChain(cfg.llm, env.GROQ_API_KEY, env.OPENROUTER_API_KEY);
         const notifier = new EmailNotifier(env.EMAIL, cfg.notifications);
 

@@ -1,4 +1,6 @@
-import type { Signal, Opportunity, Lead, DiscoveryCandidate, SegmentConfig, GnewsSegmentConfig, MarketTest, MarketTestResult, FrictionProfile, CollectorStat } from '../domain/types.js';
+import type { Signal, Opportunity, Lead, DiscoveryCandidate, SegmentConfig,
+  GnewsSegmentConfig, MarketTest, MarketTestResult, FrictionProfile,
+  CollectorStat, SignalSnapshot } from '../domain/types.js';
 
 export interface ISignalRepo {
   save(signal: Signal): Promise<boolean>;
@@ -6,6 +8,7 @@ export interface ISignalRepo {
   getAll(limit: number): Promise<Signal[]>;
   count(segment?: string): Promise<number>;
   updateFriction(id: string, strength: number, profile: FrictionProfile): Promise<void>;
+  getSignalsInRange(from: string, to: string): Promise<Signal[]>;
 }
 
 export interface IOpportunityRepo {
@@ -13,6 +16,7 @@ export interface IOpportunityRepo {
   getAll(): Promise<Opportunity[]>;
   getBySegment(segment: string): Promise<Opportunity | null>;
   markAlerted(id: string, at: string): Promise<void>;
+  updateGapScore(segment: string, score: number): Promise<void>;
 }
 
 export interface ILeadRepo {
@@ -47,6 +51,12 @@ export interface IMarketTestRepo {
 export interface Collector {
   id: string;
   collect(): Promise<Signal[]>;
+}
+
+export interface ISignalSnapshotRepo {
+  upsertSnapshot(snapshot: SignalSnapshot): Promise<void>;
+  getSnapshots(segment: string, weeksBack: number): Promise<SignalSnapshot[]>;
+  getLatestSnapshotAllSegments(): Promise<SignalSnapshot[]>;
 }
 
 export interface ICollectorHealthRepo {

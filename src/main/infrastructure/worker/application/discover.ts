@@ -115,6 +115,7 @@ function aggregate(clusters: RawCluster[]): DiscoveryCandidate[] {
   return merged
     .map(m => ({
       segment: m.profile,
+      label:   m.profile,
       pain_summary: m.pain,
       discovery_score:
         Math.round((m.post_count || 1) * (1 + (m.batch_count || 1) * 0.5) * 10) / 10,

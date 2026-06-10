@@ -50,6 +50,7 @@ export interface Opportunity {
   emails_captured: number;
   validation_deadline: string | null;
   telegram_alerted_at: string | null;
+  gap_score?: number | null;
 }
 
 export interface Lead {
@@ -58,6 +59,14 @@ export interface Lead {
   segment: string;
   created_at: string;
   price_tier: string | null;
+}
+
+export interface SignalSnapshot {
+  segment:        string;
+  week:           string;   // ISO week: '2026-W23'
+  count:          number;
+  avg_pain:       number;   // 0–10 scale (signal_strength × 10)
+  solution_ratio: number;   // 0–1
 }
 
 export interface DiscoveryCandidate {
@@ -141,6 +150,14 @@ export interface Config {
       instances: string[];
       max_results: number;
     };
+    hackernews:  { enabled: boolean; max_results: number };
+    boe:         { enabled: boolean };
+    boja:        { enabled: boolean };
+    bocas:       { enabled: boolean };
+    betalist:    { enabled: boolean };
+    appsumo:     { enabled: boolean };
+    producthunt: { enabled: boolean };
+    ine:         { enabled: boolean };
   };
   synthesis_segments: Record<string, SegmentConfig>;
 }

@@ -179,6 +179,14 @@ export class D1Repo implements ISignalRepo, IOpportunityRepo, ILeadRepo, IDiscov
       .run();
   }
 
+  async getSignalsInRange(from: string, to: string): Promise<Signal[]> {
+    const { results } = await this.db
+      .prepare('SELECT * FROM signals WHERE collected_at >= ? AND collected_at < ? ORDER BY collected_at ASC')
+      .bind(from, to)
+      .all<Record<string, unknown>>();
+    return (results ?? []).map(rowToSignal);
+  }
+
   // ── IOpportunityRepo ─────────────────────────────────────────────────────
 
   async upsert(opp: Opportunity): Promise<void> {
@@ -236,6 +244,13 @@ export class D1Repo implements ISignalRepo, IOpportunityRepo, ILeadRepo, IDiscov
     await this.db
       .prepare('UPDATE opportunities SET alerted_at = ? WHERE id = ?')
       .bind(at, id)
+      .run();
+  }
+
+  async updateGapScore(segment: string, score: number): Promise<void> {
+    await this.db
+      .prepare('UPDATE opportunities SET gap_score = ? WHERE segment = ?')
+      .bind(score, segment)
       .run();
   }
 

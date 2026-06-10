@@ -53,6 +53,10 @@ export class InMemorySignalRepo implements ISignalRepo {
     }
   }
 
+  async getSignalsInRange(from: string, to: string): Promise<Signal[]> {
+    return this.signals.filter(s => s.collected_at >= from && s.collected_at < to);
+  }
+
   getSignals(): Signal[] {
     return [...this.signals];
   }

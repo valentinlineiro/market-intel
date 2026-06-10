@@ -91,6 +91,14 @@ export const DEFAULT_CONFIG: Config = {
       instances: ['mastodon.social', 'mastodon.es'],
       max_results: 20,
     },
+    hackernews:  { enabled: false, max_results: 30 },
+    boe:         { enabled: false },
+    boja:        { enabled: false },
+    bocas:       { enabled: false },
+    betalist:    { enabled: false },
+    appsumo:     { enabled: false },
+    producthunt: { enabled: false },
+    ine:         { enabled: false },
   },
   synthesis_segments: {
     dentista: {
