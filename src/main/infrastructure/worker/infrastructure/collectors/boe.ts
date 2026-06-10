@@ -46,7 +46,7 @@ export async function collectBOE(keywords: string[], segment: string): Promise<S
     location:        'ES',
     raw_text:        `${item.titulo}. ${item.texto ?? ''}`.slice(0, 2000),
     url:             item.url,
-    pain_keywords:   [...keywords.filter(kw => item.titulo.toLowerCase().includes(kw.toLowerCase()))],
+    pain_keywords:   keywords.filter(kw => item.titulo.toLowerCase().includes(kw.toLowerCase())),
     sentiment_score: -0.5,
     salary_mean:     null,
     income_tier:     null,
