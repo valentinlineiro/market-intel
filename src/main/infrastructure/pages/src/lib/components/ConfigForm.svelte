@@ -11,6 +11,29 @@
   let saveStatus = '';
   let openSection: string | null = null;
 
+  let seedDescription = '';
+  type SeedState = { type: 'idle' } | { type: 'loading' } | { type: 'done'; count: number } | { type: 'error'; message: string };
+  let seedState: SeedState = { type: 'idle' };
+
+  async function generateSeed() {
+    if (!seedDescription.trim()) return;
+    seedState = { type: 'loading' };
+    try {
+      const fd = new FormData();
+      fd.set('description', seedDescription);
+      const res    = await fetch('?/generateSeed', { method: 'POST', body: fd });
+      const result = deserialize(await res.text()) as { type: string; data?: { success: boolean; count?: number; error?: string } };
+      if (result.type === 'success' && result.data?.success) {
+        seedState = { type: 'done', count: result.data.count ?? 0 };
+        onSave();
+      } else {
+        seedState = { type: 'error', message: result.data?.error ?? 'Error desconocido' };
+      }
+    } catch (e) {
+      seedState = { type: 'error', message: e instanceof Error ? e.message : 'Error' };
+    }
+  }
+
   function toggleSection(id: string) {
     openSection = openSection === id ? null : id;
   }
@@ -57,6 +80,30 @@
 </script>
 
 <div class="form">
+
+  <div class="seed-box">
+    <div class="seed-label">Mercado objetivo</div>
+    <textarea
+      class="seed-input"
+      rows="3"
+      placeholder="Describe tu mercado: geografía, audiencia, tipo de dolor... (ej: «Profesionales autónomos en España con carga regulatoria y fiscal»)"
+      bind:value={seedDescription}
+    ></textarea>
+    <div class="seed-actions">
+      <button class="btn-generate" on:click={generateSeed} disabled={seedState.type === 'loading' || !seedDescription.trim()}>
+        {#if seedState.type === 'loading'}
+          <span class="spinner"></span> Generando…
+        {:else}
+          ✦ Generar configuración
+        {/if}
+      </button>
+      {#if seedState.type === 'done'}
+        <span class="seed-ok">✓ {seedState.count} segmentos generados — guarda para aplicar</span>
+      {:else if seedState.type === 'error'}
+        <span class="seed-err">{seedState.message}</span>
+      {/if}
+    </div>
+  </div>
 
   <div class="section">
     <button class="section-head" on:click={() => toggleSection('scoring')}>
@@ -243,6 +290,16 @@
 
 <style>
   .form { display: flex; flex-direction: column; gap: 4px; }
+  .seed-box    { background: var(--bg-card); border: 1px solid var(--border-sub); border-radius: 8px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+  .seed-label  { font-size: 0.75rem; font-weight: 600; color: var(--text-sub); }
+  .seed-input  { padding: 8px 10px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 0.82rem; resize: vertical; font-family: inherit; }
+  .seed-input:focus { outline: none; border-color: var(--violet); }
+  .seed-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .btn-generate { padding: 8px 16px; background: var(--violet); color: #fff; border: none; border-radius: 6px; font-size: 0.8rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+  .btn-generate:disabled { opacity: 0.5; cursor: default; }
+  .btn-generate:hover:not(:disabled) { opacity: 0.88; }
+  .seed-ok  { font-size: 0.78rem; color: var(--accent); }
+  .seed-err { font-size: 0.78rem; color: var(--red); }
   .section      { background: var(--bg-card); border-radius: 8px; overflow: hidden; border: 1px solid var(--border-sub); }
   .section-head { display: flex; align-items: center; gap: 10px; width: 100%; padding: 12px 14px; background: none; border: none; cursor: pointer; text-align: left; color: var(--text); font-size: 0.85rem; font-weight: 600; }
   .section-head:hover { background: var(--bg-input); }

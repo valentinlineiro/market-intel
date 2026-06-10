@@ -125,6 +125,22 @@ export const actions: Actions = {
     return { success: res.ok };
   },
 
+  generateSeed: async ({ request, platform }) => {
+    const env  = (platform as App.Platform).env;
+    const fd   = await request.formData();
+    const desc = fd.get('description') as string;
+    const res  = await workerFetch(`${env.WORKER_URL.replace(/\/$/, '')}/generate-seed`, env, {
+      method: 'POST',
+      body:   JSON.stringify({ description: desc }),
+    });
+    if (!res.ok) {
+      const err = await res.json() as { error?: string };
+      return { success: false, error: err.error ?? `Error ${res.status}` };
+    }
+    const data = await res.json() as { segments: Record<string, unknown> };
+    return { success: true, count: Object.keys(data.segments).length };
+  },
+
   logout: async ({ cookies }) => {
     cookies.delete('session', { path: '/' });
     throw redirect(302, '/login');
