@@ -162,6 +162,12 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
     return json({ error: 'unauthorized' }, 401);
 
   try {
+    if (path === '/run-cron' && method === 'POST') {
+      const fakeCtx = { waitUntil: (p: Promise<unknown>) => p, passThroughOnException: () => {} };
+      await scheduled({} as ScheduledEvent, env, fakeCtx as unknown as ExecutionContext);
+      return json({ ok: true, started_at: new Date().toISOString() });
+    }
+
     if (path === '/health' && method === 'GET') {
       const healthRepo = new D1Repo(env.DB);
       let last_runs: Record<string, { last_run_at: string; signal_count: number; error: string | null }> = {};
