@@ -358,7 +358,7 @@ export class D1Repo implements ISignalRepo, IOpportunityRepo, ILeadRepo, IDiscov
 
     const candidates: DiscoveryCandidate[] = (results ?? []).map((r) => {
       const profile = r['profile'] as string;
-      const slug = profile.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 48);
+      const slug = profile.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 48);
       return {
       segment:         slug,
       label:           profile,
@@ -400,6 +400,7 @@ export class D1Repo implements ISignalRepo, IOpportunityRepo, ILeadRepo, IDiscov
       for (const c of candidates ?? []) {
         const profile = c['profile'] as string;
         const key = profile
+          .normalize('NFD').replace(/[̀-ͯ]/g, '')
           .toLowerCase()
           .replace(/[^a-z0-9]+/g, '_')
           .replace(/^_|_$/g, '')

@@ -569,7 +569,8 @@ const scheduled: ExportedHandlerScheduledHandler<Env> = async (_event, env, ctx)
     try {
       const discoverTexts = fresh.map(s => s.raw_text).filter(Boolean).slice(0, 80) as string[];
       if (discoverTexts.length >= 5) {
-        const knownSegments = discoveredSegments.map(s => s.key);
+        const hardcodedKeys = Object.keys(cfg.collectors.gnews.segments);
+        const knownSegments = [...hardcodedKeys, ...discoveredSegments.map(s => s.key)];
         const newCandidates = await runDiscovery(llm, notifier, cfg.discover, discoverTexts, knownSegments);
         if (newCandidates.length) {
           const run_id = crypto.randomUUID();
