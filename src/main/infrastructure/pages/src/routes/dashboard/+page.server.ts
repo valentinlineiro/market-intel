@@ -54,6 +54,13 @@ export const load: PageServerLoad = async ({ platform }) => {
 };
 
 export const actions: Actions = {
+  runCron: async ({ platform }) => {
+    const env = (platform as App.Platform).env;
+    const res = await workerFetch(`${env.WORKER_URL.replace(/\/$/, '')}/run-cron`, env, { method: 'POST' });
+    if (!res.ok) return { success: false, error: `Error ${res.status}` };
+    return { success: true };
+  },
+
   discover: async ({ platform }) => {
     const env = (platform as App.Platform).env;
     const res = await workerFetch(`${env.WORKER_URL.replace(/\/$/, '')}/discover`, env, { method: 'POST', body: '{}' });

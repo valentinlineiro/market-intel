@@ -34,13 +34,16 @@
     setTimeout(() => { saveStatus = ''; }, 3000);
   }
 
-  const collectorKeys = ['gnews', 'local_news', 'reddit', 'youtube', 'bluesky', 'mastodon'] as const;
+  const collectorKeys = ['gnews', 'local_news', 'reddit', 'youtube', 'bluesky', 'mastodon', 'hackernews', 'boe', 'boja', 'bocas', 'betalist', 'appsumo', 'producthunt', 'ine'] as const;
   type CollectorKey = typeof collectorKeys[number];
 
   function collectorLabel(key: CollectorKey): string {
     const labels: Record<CollectorKey, string> = {
       gnews: 'GNews', local_news: 'Noticias locales', reddit: 'Reddit',
       youtube: 'YouTube', bluesky: 'Bluesky', mastodon: 'Mastodon',
+      hackernews: 'Hacker News', boe: 'BOE', boja: 'BOJA',
+      bocas: 'BOCAs (DOGC/DOCV/BORM/BOCyL)', betalist: 'BetaList',
+      appsumo: 'AppSumo', producthunt: 'Product Hunt', ine: 'INE',
     };
     return labels[key];
   }
@@ -185,6 +188,8 @@
                 <div class="field"><label>Max resultados</label><input type="number" bind:value={c.max_results} min="1" max="100" /></div>
               {:else if key === 'mastodon'}
                 <div class="field"><label>Instancias</label><TagInput bind:values={c.instances as string[]} placeholder="mastodon.social..." /></div>
+                <div class="field"><label>Max resultados</label><input type="number" bind:value={c.max_results} min="1" max="100" /></div>
+              {:else if key === 'hackernews'}
                 <div class="field"><label>Max resultados</label><input type="number" bind:value={c.max_results} min="1" max="100" /></div>
               {/if}
             </div>

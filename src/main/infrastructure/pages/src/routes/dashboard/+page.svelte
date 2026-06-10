@@ -22,6 +22,28 @@
   type DiscoverState = { type: 'idle' } | { type: 'loading' } | { type: 'success'; count: number } | { type: 'error'; message: string };
   let discoverState: DiscoverState = { type: 'idle' };
 
+  type CronState = { type: 'idle' } | { type: 'loading' } | { type: 'success' } | { type: 'error'; message: string };
+  let cronState: CronState = { type: 'idle' };
+
+  async function runCron() {
+    cronState = { type: 'loading' };
+    try {
+      const fd  = new FormData();
+      const res = await fetch('?/runCron', { method: 'POST', body: fd });
+      const result = deserialize(await res.text()) as { type: string; data?: { success: boolean; error?: string } };
+      if (result.type === 'success' && result.data?.success) {
+        cronState = { type: 'success' };
+        setTimeout(() => { cronState = { type: 'idle' }; }, 4000);
+      } else {
+        cronState = { type: 'error', message: result.data?.error ?? 'Error desconocido' };
+        setTimeout(() => { cronState = { type: 'idle' }; }, 4000);
+      }
+    } catch (e) {
+      cronState = { type: 'error', message: e instanceof Error ? e.message : 'Error' };
+      setTimeout(() => { cronState = { type: 'idle' }; }, 4000);
+    }
+  }
+
   async function runDiscovery() {
     discoverState = { type: 'loading' };
     try {
@@ -50,6 +72,23 @@
       <div class="subtitle">Señales de dolor · Cádiz / España</div>
     </div>
     <div class="header-actions">
+      <button
+        class="btn-sm btn-ingest"
+        class:loading={cronState.type === 'loading'}
+        disabled={cronState.type === 'loading'}
+        on:click={runCron}
+        title="Disparar ingesta ahora"
+      >
+        {#if cronState.type === 'loading'}
+          <span class="spinner"></span> Ingestando...
+        {:else if cronState.type === 'success'}
+          ✓ Iniciado
+        {:else if cronState.type === 'error'}
+          ✗ Error
+        {:else}
+          ▶ Ingestar
+        {/if}
+      </button>
       <button class="btn-icon" on:click={() => theme.toggle()} title="Cambiar tema">
         {$theme === 'dark' ? '☀' : '☾'}
       </button>
@@ -138,6 +177,9 @@
   .btn-icon{ background: none; border: none; font-size: 1rem; cursor: pointer; color: var(--text-sub); padding: 4px 6px; border-radius: 6px; }
   .btn-icon:hover { background: var(--bg-card); }
   .btn-sm  { padding: 6px 12px; background: var(--bg-card); color: var(--text-sub); border: 1px solid var(--border); border-radius: 6px; font-size: 0.75rem; cursor: pointer; }
+  .btn-ingest { background: var(--accent); color: #fff; border-color: transparent; font-weight: 600; min-width: 90px; }
+  .btn-ingest:hover:not(:disabled) { opacity: 0.88; }
+  .btn-ingest:disabled { opacity: 0.6; cursor: default; }
   .tabs    { display: flex; background: var(--bg); border-bottom: 1px solid var(--border); overflow-x: auto; flex-shrink: 0; }
   .tab     { flex: 1; min-width: 70px; padding: 10px 4px; background: none; border: none; border-bottom: 2px solid transparent; color: var(--text-dim); font-size: 0.78rem; cursor: pointer; white-space: nowrap; }
   .tab.active { color: var(--violet); border-bottom-color: var(--violet); font-weight: 600; }
