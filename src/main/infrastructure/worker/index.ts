@@ -294,6 +294,21 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
       return json({ ok: true });
     }
 
+    if (method === 'GET' && path === '/gap-radar') {
+      const d1repo = new D1Repo(env.DB);
+      const rows = await d1repo.getGapRadar(50);
+      return json(rows.map(r => ({
+        segment:        r.segment,
+        label:          r.segment.replace(/_/g, ' '),
+        avg_pain:       Math.round(r.avg_pain * 10) / 10,
+        solution_ratio: Math.round(r.solution_ratio * 100),        // as %
+        whitespace:     Math.round((1 - r.solution_ratio) * 100),  // as %
+        gap_score:      Math.round(r.gap_score ?? 0),
+        has_landing:    r.has_landing,
+        opportunity_id: r.opportunity_id,
+      })));
+    }
+
     if (path === '/discovery/candidates' && method === 'POST') {
       const { run_id, candidates } = await request.json() as {
         run_id?: string;

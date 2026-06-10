@@ -691,4 +691,46 @@ export class D1Repo implements ISignalRepo, IOpportunityRepo, ILeadRepo, IDiscov
       .all<Record<string, unknown>>();
     return (results ?? []).map(rowToSnapshot);
   }
+
+  async getGapRadar(limit = 50): Promise<Array<{
+    segment:        string;
+    avg_pain:       number;
+    count:          number;
+    solution_ratio: number;
+    gap_score:      number | null;
+    opportunity_id: string | null;
+    has_landing:    boolean;
+  }>> {
+    const { results } = await this.db
+      .prepare(`
+        SELECT
+          s.segment,
+          s.avg_pain,
+          s.count,
+          s.solution_ratio,
+          o.gap_score,
+          o.id        AS opportunity_id,
+          CASE WHEN lp.segment IS NOT NULL THEN 1 ELSE 0 END AS has_landing
+        FROM signal_snapshots s
+        INNER JOIN (
+          SELECT segment, MAX(week) AS max_week FROM signal_snapshots GROUP BY segment
+        ) latest ON s.segment = latest.segment AND s.week = latest.max_week
+        LEFT JOIN opportunities o ON o.segment = s.segment
+        LEFT JOIN (SELECT DISTINCT segment FROM landing_pages) lp ON lp.segment = s.segment
+        ORDER BY COALESCE(o.gap_score, 0) DESC, s.avg_pain DESC
+        LIMIT ?
+      `)
+      .bind(limit)
+      .all<Record<string, unknown>>();
+
+    return (results ?? []).map(r => ({
+      segment:        r['segment'] as string,
+      avg_pain:       r['avg_pain'] as number,
+      count:          r['count'] as number,
+      solution_ratio: r['solution_ratio'] as number,
+      gap_score:      r['gap_score'] as number | null,
+      opportunity_id: r['opportunity_id'] as string | null,
+      has_landing:    r['has_landing'] === 1,
+    }));
+  }
 }
