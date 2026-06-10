@@ -21,7 +21,7 @@ export async function collectProductHunt(
 ): Promise<Signal[]> {
   if (!apiKey) return [];
 
-  let nodes: Array<{ id: string; name: string; tagline: string; url: string; votesCount: number }> = [];
+  let nodes: Array<{ id: string; name: string; tagline: string; url: string; votesCount?: number }> = [];
   try {
     const res = await fetch('https://api.producthunt.com/v2/api/graphql', {
       method:  'POST',
@@ -47,7 +47,7 @@ export async function collectProductHunt(
       sentiment_score: 0,
       salary_mean:     null,
       income_tier:     null,
-      signal_strength: Math.min(Math.log2(n.votesCount + 2) / 12, 0.8),
+      signal_strength: Math.min(Math.log2((n.votesCount ?? 0) + 2) / 12, 0.8),
       has_deadline:    false,
       friction_analysis: null,
     } satisfies Signal));

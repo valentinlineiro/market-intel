@@ -13,9 +13,10 @@ export async function collectINE(keywords: string[], segment: string): Promise<S
 
   return rows
     .filter(row => keywords.some(kw => row.Nombre.toLowerCase().includes(kw.toLowerCase())))
+    .filter(row => row.Data.length > 0)
     .slice(0, 5)
     .map(row => {
-      const latest = row.Data[row.Data.length - 1];
+      const latest = row.Data[row.Data.length - 1]!;
       return {
         id:              crypto.randomUUID(),
         source:          'local_news' as const,
