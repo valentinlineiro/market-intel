@@ -584,7 +584,11 @@ const scheduled: ExportedHandlerScheduledHandler<Env> = async (_event, env, ctx)
     for (const stat of stats) {
       try { await d1repo.upsertHealth(stat, runAt); } catch { /* non-fatal */ }
     }
-    await analyzeFriction(fresh, llm, d1repo);
+    try {
+      await analyzeFriction(fresh, llm, d1repo);
+    } catch (e) {
+      console.error('[cron] friction analysis failed (non-fatal):', e instanceof Error ? e.message : e);
+    }
 
     // Auto-discover new segments from freshly analyzed signals
     try {
