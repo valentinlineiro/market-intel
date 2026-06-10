@@ -549,14 +549,37 @@ const scheduled: ExportedHandlerScheduledHandler<Env> = async (_event, env, ctx)
     const llm = new LLMChain(cfg.llm, env.GROQ_API_KEY, env.OPENROUTER_API_KEY, env.NIM_API_KEY, env.MISTRAL_API_KEY);
     const notifier = new EmailNotifier(env.EMAIL, cfg.notifications);
 
-    // Collect
-    const collectors = buildRegistry(cfg, env);
+    // Load previous discovery candidates to expand collection to discovered segments
+    const prevDiscovery = await d1repo.getLatestCandidates();
+    const discoveredSegments = (prevDiscovery?.candidates ?? []).map(c => ({
+      key:      c.segment,
+      keywords: c.raw_signals ?? [],
+    }));
+
+    // Collect (hardcoded segments + previously discovered ones)
+    const collectors = buildRegistry(cfg, env, discoveredSegments);
     const { signals: fresh, stats } = await runCollect(d1repo, collectors);
     const runAt = new Date().toISOString();
     for (const stat of stats) {
       try { await d1repo.upsertHealth(stat, runAt); } catch { /* non-fatal */ }
     }
     await analyzeFriction(fresh, llm, d1repo);
+
+    // Auto-discover new segments from freshly analyzed signals
+    try {
+      const discoverTexts = fresh.map(s => s.raw_text).filter(Boolean).slice(0, 80) as string[];
+      if (discoverTexts.length >= 5) {
+        const knownSegments = discoveredSegments.map(s => s.key);
+        const newCandidates = await runDiscovery(llm, notifier, cfg.discover, discoverTexts, knownSegments);
+        if (newCandidates.length) {
+          const run_id = crypto.randomUUID();
+          await d1repo.saveCandidates(newCandidates, run_id);
+          console.log(`[cron] discovery done — ${newCandidates.length} candidates`);
+        }
+      }
+    } catch (e) {
+      console.error('[cron] discovery failed (non-fatal):', e instanceof Error ? e.message : e);
+    }
 
     // Score
     await runScore(

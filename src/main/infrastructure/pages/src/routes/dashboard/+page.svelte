@@ -89,6 +89,8 @@
       if (allDone) {
         clearInterval(pollTimer!);
         pollTimer     = null;
+        // Gap scoring runs after collectors finish — wait 30s before reloading
+        await new Promise(r => setTimeout(r, 30_000));
         ingestRunning = false;
         await invalidateAll();
       }

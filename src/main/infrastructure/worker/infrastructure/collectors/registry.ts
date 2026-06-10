@@ -18,8 +18,15 @@ import { collectAppSumo }     from './appsumo.js';
 import { collectProductHunt } from './producthunt.js';
 import { collectINE }         from './ine.js';
 
-export function buildRegistry(cfg: Config, env: Env): Collector[] {
-  const segments = Object.entries(cfg.collectors.gnews.segments);
+export function buildRegistry(
+  cfg: Config,
+  env: Env,
+  extraSegments: Array<{ key: string; keywords: string[] }> = [],
+): Collector[] {
+  const segments: Array<[string, { keywords: string[] }]> = [
+    ...Object.entries(cfg.collectors.gnews.segments),
+    ...extraSegments.map(s => [s.key, { keywords: s.keywords }] as [string, { keywords: string[] }]),
+  ];
 
   return [
     {
