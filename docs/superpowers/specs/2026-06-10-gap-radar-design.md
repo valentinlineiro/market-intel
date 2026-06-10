@@ -38,6 +38,14 @@ ALTER TABLE opportunities ADD COLUMN gap_score REAL;
 
 Computed after each snapshot run. `NULL` for segments without enough history (< 1 week).
 
+### Modified domain type: `Opportunity` (`domain/types.ts`)
+
+Add `gap_score?: number` to the `Opportunity` interface (after `telegram_alerted_at`).
+
+### Modified domain type: `Config` (`domain/types.ts`)
+
+Each new collector needs an `enabled: boolean` toggle inside `config.collectors`. Add entries for `hackernews`, `boe`, `boja`, `bocas`, `betalist`, `appsumo`, `producthunt`, `ine`. Corresponding defaults must be added to `DEFAULT_CONFIG` in `infrastructure/config.ts` (all `enabled: false` initially — opt-in).
+
 ---
 
 ## Section 2 — New Collectors
@@ -72,8 +80,9 @@ All collectors implement the existing `Collector` interface (`application/ports.
 
 ### Signal tagging conventions
 
-- **Regulation collectors** (`boe`, `boja`, `bocas`): automatically set `problem_type: 'regulation'` and `has_deadline: true` on emitted signals — no LLM pass needed.
+- **Regulation collectors** (`boe`, `boja`, `bocas`): pre-populate `friction_analysis` with a JSON-stringified `FrictionProfile` (`JSON.stringify({ problem_type: 'regulation', has_deadline: true, ... })`). `Signal.friction_analysis` is `string | null`, so the value must be serialized at collection time — no LLM pass needed.
 - **Solution-density collectors** (`producthunt`, `betalist`, `appsumo`): add `'__solution__'` sentinel to `pain_keywords`. The gap scorer uses this to compute `solution_ratio` without LLM.
+- **English solution keywords** (for HN, BetaList, AppSumo signals): `"use "`, `"tool"`, `"there is"`, `"alternative"`, `"already exists"`. Combined with the Spanish set (`"uso "`, `"utilizo "`, `"existe "`, `"herramienta"`, `"ya hay"`). Applied to `raw_text` of non-regulation signals.
 
 ---
 
@@ -82,15 +91,17 @@ All collectors implement the existing `Collector` interface (`application/ports.
 The cron gains a new step after `runScore()`:
 
 ```
-Collect → Friction → Score → Snapshot + GapScore → Alert
+Collect → Friction → Score → Snapshot + GapScore
 ```
+
+Note: alerting is embedded inside `runScore()` (not a separate step). Gap-based alerting (e.g. notify when gap_score crosses a threshold) is out of scope for v1 — the existing score-based alert remains unchanged.
 
 ### `runSnapshot()` — `application/gap.ts`
 
 For each active segment:
-1. Count signals collected since last snapshot week.
-2. Compute `avg_pain` = mean `signal_strength`.
-3. Compute `solution_ratio` = fraction of signals with `'__solution__'` sentinel OR containing solution keywords (`"uso "`, `"utilizo "`, `"existe "`, `"herramienta"`, `"ya hay"`).
+1. Count signals with `collected_at` in the current ISO week.
+2. Compute `avg_pain` = mean `signal_strength`, **filtering out null values** (`Signal.signal_strength` is `number | null`). If all values are null, default to 0.
+3. Compute `solution_ratio` = fraction of signals with `'__solution__'` sentinel OR whose `raw_text` contains solution keywords (Spanish: `"uso "`, `"utilizo "`, `"existe "`, `"herramienta"`, `"ya hay"`; English: `"use "`, `"tool"`, `"there is"`, `"alternative"`, `"already exists"`).
 4. Upsert into `signal_snapshots`.
 
 ### `runGapScore()` — `application/gap.ts`
@@ -98,8 +109,9 @@ For each active segment:
 For each segment with at least 1 snapshot:
 
 ```
-momentum  = this_week_count / avg(last_4_weeks_count)
-           (defaults to 1.0 if < 4 weeks of history)
+momentum  = this_week_count / max(avg(last_4_weeks_count), 1)
+           // max(..., 1) guards against division by zero when all prior weeks had 0 signals
+           // defaults to 1.0 if < 4 weeks of history
 
 gap_score = avg_pain × momentum × (1 − solution_ratio)
            normalized to 0–100
@@ -109,7 +121,8 @@ Writes result to `opportunities.gap_score`.
 
 ### Design constraints
 
-- `gap.ts` depends only on `IMarketRepo` (ports). No LLM dependency.
+- `gap.ts` depends on `ISignalRepo` (read signals), `IOpportunityRepo` (write gap_score), and a new `ISignalSnapshotRepo` port (read/write snapshots). No LLM dependency.
+- `ISignalSnapshotRepo` needs two methods: `upsertSnapshot(snapshot)` and `getSnapshots(segment, weeksBack): SignalSnapshot[]`.
 - Fully testable with mocked snapshot data.
 - Idempotent: re-running the same cron week produces the same snapshot row (upsert).
 
@@ -149,7 +162,7 @@ Added as a tab alongside existing Opportunities and Discovery views. No new rout
 - **Dolor** — `avg_pain` (0–10)
 - **Tendencia** — momentum as `▲ +X%` / `→ 0%` / `▼ −X%` with color coding (green/grey/red)
 - **Vacío** — `(1 − solution_ratio)` as percentage
-- **Gap Score** — composite 0–100, default sort
+- **Gap Score** — composite 0–100, sorted `gap_score DESC, avg_pain DESC` (avg_pain as tiebreaker)
 - **Acción** — "Desplegar" opens DeployModal; "Ver" links to existing opportunity row
 
 **Filters:**
