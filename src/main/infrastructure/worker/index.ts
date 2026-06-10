@@ -163,9 +163,9 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
 
   try {
     if (path === '/run-cron' && method === 'POST') {
-      const fakeCtx = { waitUntil: (p: Promise<unknown>) => p, passThroughOnException: () => {} };
-      await scheduled({} as ScheduledEvent, env, fakeCtx as unknown as ExecutionContext);
-      return json({ ok: true, started_at: new Date().toISOString() });
+      const startedAt = new Date().toISOString();
+      ctx.waitUntil(Promise.resolve(scheduled({} as ScheduledEvent, env, ctx)));
+      return json({ ok: true, started_at: startedAt });
     }
 
     if (path === '/health' && method === 'GET') {
