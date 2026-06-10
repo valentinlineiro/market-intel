@@ -569,8 +569,7 @@ const scheduled: ExportedHandlerScheduledHandler<Env> = async (_event, env, ctx)
     try {
       const discoverTexts = fresh.map(s => s.raw_text).filter(Boolean).slice(0, 80) as string[];
       if (discoverTexts.length >= 5) {
-        const hardcodedKeys = Object.keys(cfg.collectors.gnews.segments);
-        const knownSegments = [...hardcodedKeys, ...discoveredSegments.map(s => s.key)];
+        const knownSegments = discoveredSegments.map(s => s.key);
         const newCandidates = await runDiscovery(llm, notifier, cfg.discover, discoverTexts, knownSegments);
         if (newCandidates.length) {
           const run_id = crypto.randomUUID();
@@ -580,6 +579,26 @@ const scheduled: ExportedHandlerScheduledHandler<Env> = async (_event, env, ctx)
       }
     } catch (e) {
       console.error('[cron] discovery failed (non-fatal):', e instanceof Error ? e.message : e);
+    }
+
+    // If discovery produced nothing, seed candidates from hardcoded config segments
+    // so runScore always has at least the baseline segments to work with
+    if (!(await d1repo.hasCandidates())) {
+      const now = new Date().toISOString();
+      const run_id = crypto.randomUUID();
+      const seeds: import('./domain/types.js').DiscoveryCandidate[] = Object.entries(cfg.collectors.gnews.segments).map(([key, sc]) => ({
+        segment:         key,
+        label:           sc.label,
+        pain_summary:    '',
+        discovery_score: 5,
+        source_urls:     [],
+        raw_signals:     sc.keywords,
+        discovered_at:   now,
+        post_count:      0,
+        income_est:      sc.income_tier,
+        has_deadline:    sc.has_deadline,
+      }));
+      await d1repo.saveCandidates(seeds, run_id);
     }
 
     // Score

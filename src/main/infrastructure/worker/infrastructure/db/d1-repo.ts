@@ -438,6 +438,11 @@ export class D1Repo implements ISignalRepo, IOpportunityRepo, ILeadRepo, IDiscov
     return Array.from(segments.values());
   }
 
+  async hasCandidates(): Promise<boolean> {
+    const row = await this.db.prepare('SELECT COUNT(*) as n FROM discovery_candidates').first<{ n: number }>();
+    return (row?.n ?? 0) > 0;
+  }
+
   // ── Extra methods (used by index.ts routing) ─────────────────────────────
 
   async updateOpportunityStatus(segment: string, status: string, now: string): Promise<void> {
