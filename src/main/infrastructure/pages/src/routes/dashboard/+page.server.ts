@@ -1,6 +1,6 @@
 import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
-import type { Stats, DiscoveryResult, Opportunity, Config } from '$lib/types.js';
+import type { Stats, DiscoveryResult, Opportunity, Config, GapEntry } from '$lib/types.js';
 
 function workerFetch(url: string, env: App.Platform['env'], init?: RequestInit): Promise<Response> {
   return fetch(url, {
@@ -22,22 +22,24 @@ export const load: PageServerLoad = async ({ platform }) => {
   const env  = (platform as App.Platform).env;
   const base = env.WORKER_URL.replace(/\/$/, '');
 
-  const [statsRes, oppsRes, leadsRes, discoveryRes, configRes, healthRes] = await Promise.all([
+  const [statsRes, oppsRes, leadsRes, discoveryRes, configRes, healthRes, gapRes] = await Promise.all([
     fetch(`${base}/public/stats`),
     fetch(`${base}/public/opportunities`),
     fetch(`${base}/public/leads`),
     fetch(`${base}/public/discovery`),
     fetch(`${base}/public/config`),
     workerFetch(`${base}/health`, env),
+    workerFetch(`${base}/gap-radar`, env),
   ]);
 
-  const [statsData, oppsData, leadsData, discoveryData, configData, healthData] = await Promise.all([
+  const [statsData, oppsData, leadsData, discoveryData, configData, healthData, gapData] = await Promise.all([
     safeJson<Stats>(statsRes, { total_signals: 0, total_opportunities: 0, by_segment: {}, top_opportunity: null }),
     safeJson<{ results: Opportunity[] }>(oppsRes, { results: [] }),
     safeJson<{ total: number; by_segment: Record<string, { email: string; captured_at: string; price_tier: string | null; lead_score: number }[]> }>(leadsRes, { total: 0, by_segment: {} }),
     safeJson<DiscoveryResult>(discoveryRes, { candidates: [], discovered_at: null, run_id: '' }),
     safeJson<{ config: Config }>(configRes, { config: {} as Config }),
     safeJson<{ status: string; last_runs: Record<string, { last_run_at: string; signal_count: number; error: string | null }> }>(healthRes, { status: 'error', last_runs: {} }),
+    safeJson<GapEntry[]>(gapRes, []),
   ]);
 
   return {
@@ -47,6 +49,7 @@ export const load: PageServerLoad = async ({ platform }) => {
     discovery:     discoveryData,
     config:        configData.config,
     health:        healthData,
+    gapRadar:      gapData,
   };
 };
 

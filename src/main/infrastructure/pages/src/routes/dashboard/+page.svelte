@@ -8,11 +8,16 @@
   import OpportunityList     from '$lib/components/OpportunityList.svelte';
   import LeadsTable          from '$lib/components/LeadsTable.svelte';
   import ConfigForm          from '$lib/components/ConfigForm.svelte';
+  import GapRadar            from '$lib/components/GapRadar.svelte';
+  import DeployModal         from '$lib/components/DeployModal.svelte';
 
   export let data: PageData;
 
-  type Tab = 'oportunidades' | 'sectores' | 'leads' | 'config';
+  type Tab = 'oportunidades' | 'sectores' | 'leads' | 'config' | 'radar';
   let activeTab: Tab = 'oportunidades';
+
+  let showDeploy    = false;
+  let deploySegment = '';
 
   type DiscoverState = { type: 'idle' } | { type: 'loading' } | { type: 'success'; count: number } | { type: 'error'; message: string };
   let discoverState: DiscoverState = { type: 'idle' };
@@ -61,7 +66,7 @@
   />
 
   <nav class="tabs">
-    {#each [['oportunidades','Oportunidades'],['sectores','Sectores'],['leads','Leads'],['config','Config']] as [id, label]}
+    {#each [['oportunidades','Oportunidades'],['sectores','Sectores'],['leads','Leads'],['config','Config'],['radar','Radar']] as [id, label]}
       <button
         class="tab"
         class:active={activeTab === id}
@@ -108,8 +113,20 @@
       <LeadsTable bySegment={data.leads.by_segment} total={data.leads.total} />
     {:else if activeTab === 'config'}
       <ConfigForm config={data.config} onSave={() => invalidateAll()} />
+    {:else if activeTab === 'radar'}
+      <GapRadar
+        entries={data.gapRadar}
+        on:deploy={e => { deploySegment = e.detail; showDeploy = true; }}
+      />
     {/if}
   </main>
+
+  {#if showDeploy && deploySegment}
+    <DeployModal
+      segment={deploySegment}
+      on:close={() => { showDeploy = false; deploySegment = ''; }}
+    />
+  {/if}
 </div>
 
 <style>

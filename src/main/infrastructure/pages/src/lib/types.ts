@@ -68,3 +68,13 @@ export interface LandingCopy {
   pain_points: string[];
   cta: string;
 }
+
+export interface GapEntry {
+  segment:        string;
+  label:          string;
+  avg_pain:       number;
+  whitespace:     number;   // 0–100 (%)
+  gap_score:      number;   // 0–100
+  has_landing:    boolean;
+  opportunity_id: string | null;
+}
