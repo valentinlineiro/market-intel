@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:workers';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { D1Repo } from '../../infrastructure/db/d1-repo.js';
-import type { Signal, Opportunity, DiscoveryCandidate } from '../../domain/types.js';
+import type { Signal, Opportunity, DiscoveryCandidate, SignalSnapshot } from '../../domain/types.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -58,11 +58,12 @@ async function applyMigrations(db: D1Database): Promise<void> {
   const ddl: string[] = [
     `CREATE TABLE IF NOT EXISTS signals (id TEXT PRIMARY KEY, source TEXT NOT NULL, collected_at TEXT NOT NULL, segment TEXT NOT NULL, location TEXT, raw_text TEXT, url TEXT, pain_keywords TEXT, sentiment_score REAL, salary_mean INTEGER, income_tier TEXT, signal_strength REAL, has_deadline INTEGER DEFAULT 0)`,
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_signals_url_seg ON signals(url, segment)`,
-    `CREATE TABLE IF NOT EXISTS opportunities (id TEXT PRIMARY KEY, segment TEXT NOT NULL, pain_summary TEXT, score REAL, score_breakdown TEXT, signal_ids TEXT, signal_count INTEGER DEFAULT 0, first_seen TEXT, last_updated TEXT, status TEXT DEFAULT 'watching', landing_url TEXT, emails_captured INTEGER DEFAULT 0, validation_deadline TEXT, alerted_at TEXT)`,
+    `CREATE TABLE IF NOT EXISTS opportunities (id TEXT PRIMARY KEY, segment TEXT NOT NULL, pain_summary TEXT, score REAL, score_breakdown TEXT, signal_ids TEXT, signal_count INTEGER DEFAULT 0, first_seen TEXT, last_updated TEXT, status TEXT DEFAULT 'watching', landing_url TEXT, emails_captured INTEGER DEFAULT 0, validation_deadline TEXT, alerted_at TEXT, gap_score REAL)`,
     `CREATE TABLE IF NOT EXISTS leads (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT NOT NULL, segment TEXT NOT NULL, captured_at TEXT NOT NULL, ip TEXT, ua TEXT, price_tier TEXT, UNIQUE(email, segment))`,
     `CREATE TABLE IF NOT EXISTS landing_pages (segment TEXT NOT NULL, page_slug TEXT NOT NULL DEFAULT 'index', html TEXT NOT NULL, copy TEXT, title TEXT, deployed_at TEXT NOT NULL, PRIMARY KEY (segment, page_slug))`,
     `CREATE TABLE IF NOT EXISTS discovery_candidates (id INTEGER PRIMARY KEY AUTOINCREMENT, profile TEXT NOT NULL, pain TEXT NOT NULL, keywords TEXT NOT NULL, source_urls TEXT NOT NULL DEFAULT '[]', post_count INTEGER DEFAULT 0, discovery_score REAL DEFAULT 0, income_est TEXT, has_deadline INTEGER DEFAULT 0, source TEXT DEFAULT 'reddit', run_id TEXT NOT NULL, discovered_at TEXT NOT NULL)`,
     `CREATE TABLE IF NOT EXISTS market_tests (id TEXT PRIMARY KEY, description TEXT NOT NULL, generated_config TEXT, status TEXT NOT NULL DEFAULT 'pending', result TEXT, error TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+    `CREATE TABLE IF NOT EXISTS signal_snapshots (segment TEXT NOT NULL, week TEXT NOT NULL, count INTEGER NOT NULL, avg_pain REAL NOT NULL, solution_ratio REAL NOT NULL DEFAULT 0, PRIMARY KEY (segment, week))`,
   ];
 
   for (const stmt of ddl) {
@@ -80,7 +81,7 @@ describe('D1Repo', () => {
   beforeEach(async () => {
     await applyMigrations(env.DB);
     // Clear tables before each test to ensure isolation
-    for (const table of ['signals', 'opportunities', 'leads', 'landing_pages', 'discovery_candidates', 'market_tests']) {
+    for (const table of ['signals', 'opportunities', 'leads', 'landing_pages', 'discovery_candidates', 'market_tests', 'signal_snapshots']) {
       await env.DB.exec(`DELETE FROM ${table}`);
     }
     repo = new D1Repo(env.DB);
@@ -399,7 +400,7 @@ describe('D1Repo — market tests', () => {
 
   beforeEach(async () => {
     await applyMigrations(env.DB);
-    for (const table of ['signals', 'opportunities', 'leads', 'landing_pages', 'discovery_candidates', 'market_tests']) {
+    for (const table of ['signals', 'opportunities', 'leads', 'landing_pages', 'discovery_candidates', 'market_tests', 'signal_snapshots']) {
       await env.DB.exec(`DELETE FROM ${table}`);
     }
     repo = new D1Repo(env.DB);
@@ -493,5 +494,105 @@ describe('D1Repo — market tests', () => {
     };
     // Should not throw — caller guarantees id exists after claimMarketTest
     await expect(repo.completeMarketTest('no-such-id', result, new Date().toISOString())).resolves.toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Signal snapshots repo
+// ---------------------------------------------------------------------------
+
+describe('D1Repo — signal_snapshots', () => {
+  let repo: D1Repo;
+
+  beforeEach(async () => {
+    await applyMigrations(env.DB);
+    for (const table of ['signals', 'opportunities', 'leads', 'landing_pages', 'discovery_candidates', 'market_tests', 'signal_snapshots']) {
+      await env.DB.exec(`DELETE FROM ${table}`);
+    }
+    repo = new D1Repo(env.DB);
+  });
+
+  // ── signal_snapshots ──────────────────────────────────────────────────────
+
+  describe('ISignalSnapshotRepo', () => {
+    it('upserts and retrieves a snapshot', async () => {
+      const snap: SignalSnapshot = {
+        segment: 'test_seg', week: '2026-W23',
+        count: 10, avg_pain: 7.5, solution_ratio: 0.2,
+      };
+      await repo.upsertSnapshot(snap);
+      const results = await repo.getSnapshots('test_seg', 5);
+      expect(results).toHaveLength(1);
+      expect(results[0]).toMatchObject(snap);
+    });
+
+    it('upserts are idempotent', async () => {
+      const snap: SignalSnapshot = { segment: 'seg2', week: '2026-W23', count: 5, avg_pain: 5.0, solution_ratio: 0.1 };
+      await repo.upsertSnapshot(snap);
+      await repo.upsertSnapshot({ ...snap, count: 8 }); // re-run same week
+      const results = await repo.getSnapshots('seg2', 5);
+      expect(results).toHaveLength(1);
+      expect(results[0]!.count).toBe(8); // latest wins
+    });
+
+    it('getSnapshots returns ordered newest-first up to weeksBack', async () => {
+      await repo.upsertSnapshot({ segment: 'seg3', week: '2026-W20', count: 3, avg_pain: 4.0, solution_ratio: 0.0 });
+      await repo.upsertSnapshot({ segment: 'seg3', week: '2026-W21', count: 5, avg_pain: 5.0, solution_ratio: 0.0 });
+      await repo.upsertSnapshot({ segment: 'seg3', week: '2026-W22', count: 7, avg_pain: 6.0, solution_ratio: 0.0 });
+      const results = await repo.getSnapshots('seg3', 2);
+      expect(results).toHaveLength(2);
+      expect(results[0]!.week).toBe('2026-W22');
+      expect(results[1]!.week).toBe('2026-W21');
+    });
+
+    it('getLatestSnapshotAllSegments returns one row per segment', async () => {
+      await repo.upsertSnapshot({ segment: 'segA', week: '2026-W22', count: 2, avg_pain: 3.0, solution_ratio: 0.0 });
+      await repo.upsertSnapshot({ segment: 'segA', week: '2026-W23', count: 4, avg_pain: 5.0, solution_ratio: 0.0 });
+      await repo.upsertSnapshot({ segment: 'segB', week: '2026-W23', count: 1, avg_pain: 2.0, solution_ratio: 0.5 });
+      const all = await repo.getLatestSnapshotAllSegments();
+      const segA = all.find(s => s.segment === 'segA');
+      expect(segA?.week).toBe('2026-W23');
+    });
+  });
+
+  // ── IOpportunityRepo.updateGapScore ──────────────────────────────────────
+
+  describe('updateGapScore', () => {
+    it('sets gap_score on an existing opportunity', async () => {
+      const opp: Opportunity = {
+        id: 'opp-gap-1', segment: 'gap_seg', pain_summary: 'test',
+        score: 7.5, score_breakdown: { dolor: 7, capacidad_pago: 7, volumen: 7, competencia: 7, urgencia: 7 },
+        signal_ids: [], signal_count: 5,
+        first_seen: '2026-01-01T00:00:00.000Z', last_updated: '2026-01-01T00:00:00.000Z',
+        status: 'watching', landing_url: null, emails_captured: 0,
+        validation_deadline: null, telegram_alerted_at: null,
+      };
+      await repo.upsert(opp);
+      await repo.updateGapScore('gap_seg', 82);
+      const fetched = await repo.getBySegment('gap_seg');
+      expect(fetched?.gap_score).toBe(82);
+    });
+  });
+
+  // ── ISignalRepo.getSignalsInRange ─────────────────────────────────────────
+
+  describe('getSignalsInRange', () => {
+    it('returns signals within the date range', async () => {
+      const makeSignal = (id: string, at: string): Signal => ({
+        id, source: 'reddit' as const, collected_at: at,
+        segment: 'range_seg', location: null,
+        raw_text: 'test', url: `https://example.com/${id}`,
+        pain_keywords: [], sentiment_score: null, salary_mean: null,
+        income_tier: null, signal_strength: 0.5, has_deadline: false, friction_analysis: null,
+      });
+      await repo.save(makeSignal('r1', '2026-06-09T10:00:00Z'));
+      await repo.save(makeSignal('r2', '2026-06-10T10:00:00Z'));
+      await repo.save(makeSignal('r3', '2026-06-15T10:00:00Z'));
+      const results = await repo.getSignalsInRange('2026-06-09T00:00:00Z', '2026-06-11T00:00:00Z');
+      const ids = results.map(s => s.id);
+      expect(ids).toContain('r1');
+      expect(ids).toContain('r2');
+      expect(ids).not.toContain('r3');
+    });
   });
 });

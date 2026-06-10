@@ -11,6 +11,7 @@ import type {
   MarketTestResult,
   FrictionProfile,
   CollectorStat,
+  SignalSnapshot,
 } from '../../domain/types.js';
 import type {
   ISignalRepo,
@@ -19,6 +20,7 @@ import type {
   IDiscoveryRepo,
   IMarketTestRepo,
   ICollectorHealthRepo,
+  ISignalSnapshotRepo,
 } from '../../application/ports.js';
 
 // ---------------------------------------------------------------------------
@@ -73,6 +75,17 @@ function rowToOpportunity(r: Record<string, unknown>): Opportunity {
     emails_captured:     (r['emails_captured'] as number) ?? 0,
     validation_deadline: (r['validation_deadline'] as string | null) ?? null,
     telegram_alerted_at: (r['alerted_at'] as string | null) ?? null,
+    gap_score:           (r['gap_score'] as number | null) ?? null,
+  };
+}
+
+function rowToSnapshot(row: Record<string, unknown>): SignalSnapshot {
+  return {
+    segment:        row['segment'] as string,
+    week:           row['week'] as string,
+    count:          row['count'] as number,
+    avg_pain:       row['avg_pain'] as number,
+    solution_ratio: row['solution_ratio'] as number,
   };
 }
 
@@ -93,7 +106,7 @@ function rowToLead(r: Record<string, unknown>): Lead {
 // TypeScript does not allow two methods with the same name but different signatures
 // when implementing multiple interfaces.  We satisfy both ISignalRepo.getAll(limit)
 // and IOpportunityRepo.getAll() via overloads.
-export class D1Repo implements ISignalRepo, IOpportunityRepo, ILeadRepo, IDiscoveryRepo, IMarketTestRepo, ICollectorHealthRepo {
+export class D1Repo implements ISignalRepo, IOpportunityRepo, ILeadRepo, IDiscoveryRepo, IMarketTestRepo, ICollectorHealthRepo, ISignalSnapshotRepo {
   constructor(private readonly db: D1Database) {}
 
   // ── ISignalRepo ──────────────────────────────────────────────────────────
@@ -181,7 +194,9 @@ export class D1Repo implements ISignalRepo, IOpportunityRepo, ILeadRepo, IDiscov
 
   async getSignalsInRange(from: string, to: string): Promise<Signal[]> {
     const { results } = await this.db
-      .prepare('SELECT * FROM signals WHERE collected_at >= ? AND collected_at < ? ORDER BY collected_at ASC')
+      .prepare(
+        `SELECT * FROM signals WHERE collected_at >= ? AND collected_at < ? ORDER BY collected_at DESC`
+      )
       .bind(from, to)
       .all<Record<string, unknown>>();
     return (results ?? []).map(rowToSignal);
@@ -637,5 +652,43 @@ export class D1Repo implements ISignalRepo, IOpportunityRepo, ILeadRepo, IDiscov
       .prepare('SELECT collector_id, last_run_at, signal_count, error FROM collector_health ORDER BY collector_id')
       .all<{ collector_id: string; last_run_at: string; signal_count: number; error: string | null }>();
     return result.results;
+  }
+
+  // ── ISignalSnapshotRepo ───────────────────────────────────────────────────
+
+  async upsertSnapshot(snapshot: SignalSnapshot): Promise<void> {
+    await this.db
+      .prepare(`
+        INSERT INTO signal_snapshots (segment, week, count, avg_pain, solution_ratio)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(segment, week) DO UPDATE SET
+          count=excluded.count,
+          avg_pain=excluded.avg_pain,
+          solution_ratio=excluded.solution_ratio
+      `)
+      .bind(snapshot.segment, snapshot.week, snapshot.count, snapshot.avg_pain, snapshot.solution_ratio)
+      .run();
+  }
+
+  async getSnapshots(segment: string, weeksBack: number): Promise<SignalSnapshot[]> {
+    const { results } = await this.db
+      .prepare(
+        `SELECT * FROM signal_snapshots WHERE segment = ? ORDER BY week DESC LIMIT ?`
+      )
+      .bind(segment, weeksBack)
+      .all<Record<string, unknown>>();
+    return (results ?? []).map(rowToSnapshot);
+  }
+
+  async getLatestSnapshotAllSegments(): Promise<SignalSnapshot[]> {
+    const { results } = await this.db
+      .prepare(`
+        SELECT s.* FROM signal_snapshots s
+        INNER JOIN (
+          SELECT segment, MAX(week) as max_week FROM signal_snapshots GROUP BY segment
+        ) latest ON s.segment = latest.segment AND s.week = latest.max_week
+      `)
+      .all<Record<string, unknown>>();
+    return (results ?? []).map(rowToSnapshot);
   }
 }
