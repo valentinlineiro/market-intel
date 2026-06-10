@@ -9,6 +9,12 @@ import { collectReddit } from './reddit.js';
 import { collectYouTube } from './youtube.js';
 import { collectBluesky } from './bluesky.js';
 import { collectMastodon } from './mastodon.js';
+import { collectHackerNews }  from './hackernews.js';
+import { collectBOE }         from './boe.js';
+import { collectBOJA }        from './boja.js';
+import { collectBOCAs }       from './bocas.js';
+import { collectBetaList }    from './betalist.js';
+import { collectAppSumo }     from './appsumo.js';
 
 export function buildRegistry(cfg: Config, env: Env): Collector[] {
   const segments = Object.entries(cfg.collectors.gnews.segments);
@@ -93,6 +99,72 @@ export function buildRegistry(cfg: Config, env: Env): Collector[] {
             cfg.collectors.mastodon.instances,
             cfg.collectors.mastodon.max_results,
           ));
+        }
+        return all;
+      },
+    },
+    {
+      id: 'hackernews',
+      collect: async () => {
+        if (!cfg.collectors.hackernews.enabled) return [];
+        const all: Signal[] = [];
+        for (const [segment, sc] of segments) {
+          all.push(...await collectHackerNews(sc.keywords, segment, cfg.collectors.hackernews.max_results));
+        }
+        return all;
+      },
+    },
+    {
+      id: 'boe',
+      collect: async () => {
+        if (!cfg.collectors.boe.enabled) return [];
+        const all: Signal[] = [];
+        for (const [segment, sc] of segments) {
+          all.push(...await collectBOE(sc.keywords, segment));
+        }
+        return all;
+      },
+    },
+    {
+      id: 'boja',
+      collect: async () => {
+        if (!cfg.collectors.boja.enabled) return [];
+        const all: Signal[] = [];
+        for (const [segment, sc] of segments) {
+          all.push(...await collectBOJA(sc.keywords, segment));
+        }
+        return all;
+      },
+    },
+    {
+      id: 'bocas',
+      collect: async () => {
+        if (!cfg.collectors.bocas.enabled) return [];
+        const all: Signal[] = [];
+        for (const [segment, sc] of segments) {
+          all.push(...await collectBOCAs(sc.keywords, segment));
+        }
+        return all;
+      },
+    },
+    {
+      id: 'betalist',
+      collect: async () => {
+        if (!cfg.collectors.betalist.enabled) return [];
+        const all: Signal[] = [];
+        for (const [segment, sc] of segments) {
+          all.push(...await collectBetaList(sc.keywords, segment));
+        }
+        return all;
+      },
+    },
+    {
+      id: 'appsumo',
+      collect: async () => {
+        if (!cfg.collectors.appsumo.enabled) return [];
+        const all: Signal[] = [];
+        for (const [segment, sc] of segments) {
+          all.push(...await collectAppSumo(sc.keywords, segment));
         }
         return all;
       },
