@@ -60,6 +60,7 @@ export interface Env {
   OPENROUTER_API_KEY?: string;
   GITHUB_TOKEN?: string;
   YOUTUBE_API_KEY?: string;
+  PRODUCTHUNT_API_KEY?: string;
   EMAIL?: SendEmail;
 }
 

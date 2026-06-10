@@ -15,6 +15,8 @@ import { collectBOJA }        from './boja.js';
 import { collectBOCAs }       from './bocas.js';
 import { collectBetaList }    from './betalist.js';
 import { collectAppSumo }     from './appsumo.js';
+import { collectProductHunt } from './producthunt.js';
+import { collectINE }         from './ine.js';
 
 export function buildRegistry(cfg: Config, env: Env): Collector[] {
   const segments = Object.entries(cfg.collectors.gnews.segments);
@@ -165,6 +167,28 @@ export function buildRegistry(cfg: Config, env: Env): Collector[] {
         const all: Signal[] = [];
         for (const [segment, sc] of segments) {
           all.push(...await collectAppSumo(sc.keywords, segment));
+        }
+        return all;
+      },
+    },
+    {
+      id: 'producthunt',
+      collect: async () => {
+        if (!cfg.collectors.producthunt.enabled || !env.PRODUCTHUNT_API_KEY) return [];
+        const all: Signal[] = [];
+        for (const [segment, sc] of segments) {
+          all.push(...await collectProductHunt(sc.keywords, segment, env.PRODUCTHUNT_API_KEY ?? ''));
+        }
+        return all;
+      },
+    },
+    {
+      id: 'ine',
+      collect: async () => {
+        if (!cfg.collectors.ine.enabled) return [];
+        const all: Signal[] = [];
+        for (const [segment, sc] of segments) {
+          all.push(...await collectINE(sc.keywords, segment));
         }
         return all;
       },
