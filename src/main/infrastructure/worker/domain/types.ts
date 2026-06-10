@@ -91,16 +91,20 @@ export interface SegmentConfig {
   discovery_score: number;
 }
 
-export interface GnewsSegmentConfig {
+export interface MarketSegment {
   label: string;
   queries: string[];
   keywords: string[];
-  salary_mean: number;
+  salary_mean?: number;
   income_tier: string;
   has_deadline: boolean;
 }
 
+/** @deprecated use MarketSegment */
+export type GnewsSegmentConfig = MarketSegment;
+
 export interface Config {
+  segments: Record<string, MarketSegment>;
   score: {
     top_n: number;
     min_score: number;
@@ -125,7 +129,6 @@ export interface Config {
     gnews: {
       enabled: boolean;
       max_results: number;
-      segments: Record<string, GnewsSegmentConfig>;
     };
     local_news: {
       enabled: boolean;

@@ -5,6 +5,36 @@ let cachedConfig: Config | null = null;
 let cachedVersion: string | null = null;
 
 export const DEFAULT_CONFIG: Config = {
+  segments: {
+    dentista: {
+      label: 'Odontólogo / Clínica dental',
+      queries: ['verifactu dentista', 'software dental hacienda', 'facturación electrónica clínica dental', 'RRSIF odontología'],
+      keywords: ['verifactu', 'hacienda', 'facturación', 'rrsif', 'multa', 'gestión clínica'],
+      income_tier: 'high',
+      has_deadline: true,
+    },
+    docente_universitario: {
+      label: 'Docente universitario',
+      queries: ['ANECA acreditación universidad', 'sexenio investigación problema', 'Docentia evaluación docente'],
+      keywords: ['aneca', 'acreditación', 'sexenio', 'docentia', 'plaza'],
+      income_tier: 'medium_high',
+      has_deadline: false,
+    },
+    abogado_autonomo: {
+      label: 'Abogado autónomo',
+      queries: ['LexNet abogados problema', 'facturación electrónica abogados autónomos'],
+      keywords: ['lexnet', 'facturación', 'irpf', 'turno oficio', 'honorarios'],
+      income_tier: 'medium_high',
+      has_deadline: false,
+    },
+    arquitecto: {
+      label: 'Arquitecto',
+      queries: ['visado colegial arquitectos', 'licencia obras ayuntamiento lentitud'],
+      keywords: ['visado colegial', 'licencia obras', 'burocracia', 'certificado energético'],
+      income_tier: 'medium',
+      has_deadline: false,
+    },
+  },
   score: {
     top_n: 10,
     min_score: 5.0,
@@ -29,40 +59,6 @@ export const DEFAULT_CONFIG: Config = {
     gnews: {
       enabled: true,
       max_results: 15,
-      segments: {
-        dentista: {
-          label: 'Odontólogo / Clínica dental',
-          queries: ['verifactu dentista', 'software dental hacienda', 'facturación electrónica clínica dental', 'RRSIF odontología'],
-          keywords: ['verifactu', 'hacienda', 'facturación', 'rrsif', 'multa', 'gestión clínica'],
-          salary_mean: 66500,
-          income_tier: 'high',
-          has_deadline: true,
-        },
-        docente_universitario: {
-          label: 'Docente universitario',
-          queries: ['ANECA acreditación universidad', 'sexenio investigación problema', 'Docentia evaluación docente'],
-          keywords: ['aneca', 'acreditación', 'sexenio', 'docentia', 'plaza'],
-          salary_mean: 42000,
-          income_tier: 'medium_high',
-          has_deadline: false,
-        },
-        abogado_autonomo: {
-          label: 'Abogado autónomo',
-          queries: ['LexNet abogados problema', 'facturación electrónica abogados autónomos'],
-          keywords: ['lexnet', 'facturación', 'irpf', 'turno oficio', 'honorarios'],
-          salary_mean: 35000,
-          income_tier: 'medium_high',
-          has_deadline: false,
-        },
-        arquitecto: {
-          label: 'Arquitecto',
-          queries: ['visado colegial arquitectos', 'licencia obras ayuntamiento lentitud'],
-          keywords: ['visado colegial', 'licencia obras', 'burocracia', 'certificado energético'],
-          salary_mean: 28500,
-          income_tier: 'medium',
-          has_deadline: false,
-        },
-      },
     },
     local_news: {
       enabled: true,
@@ -100,40 +96,7 @@ export const DEFAULT_CONFIG: Config = {
     producthunt: { enabled: false },
     ine:         { enabled: false },
   },
-  synthesis_segments: {
-    dentista: {
-      key: 'dentista',
-      label: 'Odontólogo / Clínica dental',
-      keywords: ['Verifactu', 'gestión clínica', 'seguros'],
-      income_tier: 'high',
-      has_deadline: true,
-      discovery_score: 0,
-    },
-    docente_universitario: {
-      key: 'docente_universitario',
-      label: 'Docente universitario',
-      keywords: ['ANECA', 'sexenios', 'burocracia'],
-      income_tier: 'medium_high',
-      has_deadline: false,
-      discovery_score: 0,
-    },
-    abogado_autonomo: {
-      key: 'abogado_autonomo',
-      label: 'Abogado autónomo',
-      keywords: ['LexNet', 'IVA', 'expedientes'],
-      income_tier: 'medium_high',
-      has_deadline: false,
-      discovery_score: 0,
-    },
-    arquitecto: {
-      key: 'arquitecto',
-      label: 'Arquitecto',
-      keywords: ['visado', 'presupuestos', 'certificados'],
-      income_tier: 'medium',
-      has_deadline: false,
-      discovery_score: 0,
-    },
-  },
+  synthesis_segments: {},
 };
 
 export async function getConfig(db: D1Database): Promise<Config> {

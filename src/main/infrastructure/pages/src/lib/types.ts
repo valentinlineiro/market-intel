@@ -54,6 +54,7 @@ export interface DiscoveryResult {
 }
 
 export interface Config {
+  segments: Record<string, unknown>;
   score: Record<string, unknown>;
   llm: Record<string, unknown>;
   discover: Record<string, unknown>;

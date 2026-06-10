@@ -81,7 +81,7 @@ export async function collectGnews(
             url:             item.link || `gnews://${crypto.randomUUID()}`,
             pain_keywords:   matched,
             sentiment_score: sent,
-            salary_mean:     config.salary_mean,
+            salary_mean:     config.salary_mean ?? null,
             income_tier:     config.income_tier,
             signal_strength: signalStrength(matched.length, sent, text.length),
             has_deadline:    config.has_deadline,

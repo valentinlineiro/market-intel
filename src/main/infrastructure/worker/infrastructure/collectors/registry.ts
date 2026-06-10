@@ -23,15 +23,15 @@ export function buildRegistry(
   env: Env,
   extraSegments: Array<{ key: string; keywords: string[] }> = [],
 ): Collector[] {
-  const segments: Array<[string, { keywords: string[] }]> = [
-    ...Object.entries(cfg.collectors.gnews.segments),
+  const segments: Array<[string, { keywords: string[]; queries?: string[] }]> = [
+    ...Object.entries(cfg.segments),
     ...extraSegments.map(s => [s.key, { keywords: s.keywords }] as [string, { keywords: string[] }]),
   ];
 
   return [
     {
       id: 'gnews',
-      collect: () => collectGnews(cfg.collectors.gnews.segments, env.GROQ_API_KEY ?? ''),
+      collect: () => collectGnews(cfg.segments, env.GROQ_API_KEY ?? ''),
     },
     {
       id: 'local_news',

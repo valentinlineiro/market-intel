@@ -369,13 +369,12 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
 
     if (path === '/debug/collect-all' && method === 'GET') {
       const testCfg: Config = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
-      if (!testCfg.collectors.gnews.segments || !Object.keys(testCfg.collectors.gnews.segments).length) {
-        testCfg.collectors.gnews.segments = {
+      if (!testCfg.segments || !Object.keys(testCfg.segments).length) {
+        testCfg.segments = {
           dentista: {
             label: 'Dentista',
             queries: ['verifactu dentista'],
             keywords: ['verifactu', 'hacienda', 'facturación', 'rrsif', 'multa'],
-            salary_mean: 66500,
             income_tier: 'high',
             has_deadline: true,
           },
@@ -569,7 +568,8 @@ const scheduled: ExportedHandlerScheduledHandler<Env> = async (_event, env, ctx)
     try {
       const discoverTexts = fresh.map(s => s.raw_text).filter(Boolean).slice(0, 80) as string[];
       if (discoverTexts.length >= 5) {
-        const knownSegments = discoveredSegments.map(s => s.key);
+        const hardcodedKeys = Object.keys(cfg.segments);
+        const knownSegments = [...hardcodedKeys, ...discoveredSegments.map(s => s.key)];
         const newCandidates = await runDiscovery(llm, notifier, cfg.discover, discoverTexts, knownSegments);
         if (newCandidates.length) {
           const run_id = crypto.randomUUID();
@@ -586,7 +586,7 @@ const scheduled: ExportedHandlerScheduledHandler<Env> = async (_event, env, ctx)
     if (!(await d1repo.hasCandidates())) {
       const now = new Date().toISOString();
       const run_id = crypto.randomUUID();
-      const seeds: import('./domain/types.js').DiscoveryCandidate[] = Object.entries(cfg.collectors.gnews.segments).map(([key, sc]) => ({
+      const seeds: import('./domain/types.js').DiscoveryCandidate[] = Object.entries(cfg.segments).map(([key, sc]) => ({
         segment:         key,
         label:           sc.label,
         pain_summary:    '',

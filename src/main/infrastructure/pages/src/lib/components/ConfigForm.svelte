@@ -53,8 +53,7 @@
   $: discover = (draft.discover      ?? {}) as Record<string, unknown>;
   $: notifs  = (draft.notifications  ?? {}) as Record<string, unknown>;
   $: collectors = (draft.collectors ?? {}) as Record<string, Record<string, unknown>>;
-  $: gnewsSegments = Object.keys((collectors.gnews?.segments ?? {}) as Record<string, unknown>);
-  $: synthSegments = Object.keys(draft.synthesis_segments ?? {});
+  $: segmentKeys = Object.keys((draft.segments ?? {}) as Record<string, unknown>);
 </script>
 
 <div class="form">
@@ -202,26 +201,25 @@
   </div>
 
   <div class="section">
-    <button class="section-head" on:click={() => toggleSection('gnews-segments')}>
+    <button class="section-head" on:click={() => toggleSection('segments')}>
       <span class="section-icon" style="background:var(--accent-bg);color:var(--accent)">◈</span>
-      <span>Segmentos GNews</span>
-      <span class="chevron" class:rotated={openSection === 'gnews-segments'}>›</span>
+      <span>Segmentos</span>
+      <span class="chevron" class:rotated={openSection === 'segments'}>›</span>
     </button>
-    {#if openSection === 'gnews-segments'}
+    {#if openSection === 'segments'}
       <div class="section-body">
-        {#each gnewsSegments as segKey}
-          {@const seg = ((collectors.gnews?.segments ?? {}) as Record<string, Record<string, unknown>>)[segKey]}
+        {#each segmentKeys as segKey}
+          {@const seg = ((draft.segments ?? {}) as Record<string, Record<string, unknown>>)[segKey]}
           <div class="subsection">
             <div class="subsection-head"><span class="subsection-title">{cleanSegment(segKey)}</span></div>
             <div class="field"><label>Label</label><input type="text" bind:value={seg.label} /></div>
             <div class="field">
-              <label>Queries (una por línea)</label>
+              <label>Queries GNews (una por línea)</label>
               <textarea rows="3" value={(seg.queries as string[] ?? []).join('\n')}
                 on:change={(e) => { seg.queries = e.currentTarget.value.split('\n').map((s: string) => s.trim()).filter(Boolean); }}
               ></textarea>
             </div>
             <div class="field"><label>Keywords</label><TagInput bind:values={seg.keywords as string[]} /></div>
-            <div class="field"><label>Salario medio (€)</label><input type="number" bind:value={seg.salary_mean} min="0" step="500" /></div>
             <div class="field">
               <label>Income tier</label>
               <select bind:value={seg.income_tier}>
@@ -230,35 +228,6 @@
               </select>
             </div>
             <div class="field field-row"><label>Has deadline</label><input type="checkbox" checked={!!seg.has_deadline} on:change={(e) => { seg.has_deadline = e.currentTarget.checked; }} /></div>
-          </div>
-        {/each}
-      </div>
-    {/if}
-  </div>
-
-  <div class="section">
-    <button class="section-head" on:click={() => toggleSection('synth-segments')}>
-      <span class="section-icon" style="background:var(--violet-bg);color:var(--violet)">◈</span>
-      <span>Segmentos Síntesis</span>
-      <span class="chevron" class:rotated={openSection === 'synth-segments'}>›</span>
-    </button>
-    {#if openSection === 'synth-segments'}
-      <div class="section-body">
-        {#each synthSegments as segKey}
-          {@const seg = ((draft.synthesis_segments ?? {}) as Record<string, Record<string, unknown>>)[segKey]}
-          <div class="subsection">
-            <div class="subsection-head"><span class="subsection-title">{cleanSegment(segKey)}</span></div>
-            <div class="field"><label>Label</label><input type="text" bind:value={seg.label} /></div>
-            <div class="field"><label>Keywords</label><TagInput bind:values={seg.keywords as string[]} /></div>
-            <div class="field">
-              <label>Income tier</label>
-              <select bind:value={seg.income_tier}>
-                <option value="low">Low</option><option value="medium">Medium</option>
-                <option value="medium_high">Medium high</option><option value="high">High</option>
-              </select>
-            </div>
-            <div class="field field-row"><label>Has deadline</label><input type="checkbox" checked={!!seg.has_deadline} on:change={(e) => { seg.has_deadline = e.currentTarget.checked; }} /></div>
-            <div class="field"><label>Discovery score</label><input type="number" value={seg.discovery_score} disabled /></div>
           </div>
         {/each}
       </div>
