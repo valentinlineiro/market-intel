@@ -58,6 +58,8 @@ export interface Env {
   WORKER_SECRET: string;
   GROQ_API_KEY?: string;
   OPENROUTER_API_KEY?: string;
+  NIM_API_KEY?: string;
+  MISTRAL_API_KEY?: string;
   GITHUB_TOKEN?: string;
   YOUTUBE_API_KEY?: string;
   PRODUCTHUNT_API_KEY?: string;
@@ -228,8 +230,8 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
     if (path === '/synthesize' && method === 'POST') {
       const { segment } = await request.json() as { segment?: string };
       if (!segment) return json({ error: 'segment required' }, 400);
-      if (!env.GROQ_API_KEY && !env.OPENROUTER_API_KEY)
-        return json({ error: 'No LLM key configured (GROQ_API_KEY or OPENROUTER_API_KEY required)' }, 503);
+      if (!env.GROQ_API_KEY && !env.OPENROUTER_API_KEY && !env.NIM_API_KEY && !env.MISTRAL_API_KEY)
+        return json({ error: 'No LLM key configured (set GROQ_API_KEY, OPENROUTER_API_KEY, NIM_API_KEY, or MISTRAL_API_KEY)' }, 503);
       const cfg = await getConfig(env.DB);
       let segmentConfig = cfg.synthesis_segments[segment];
       if (!segmentConfig) {
@@ -246,7 +248,7 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
           discovery_score: candidate.discovery_score,
         };
       }
-      const llm = new LLMChain(cfg.llm, env.GROQ_API_KEY, env.OPENROUTER_API_KEY);
+      const llm = new LLMChain(cfg.llm, env.GROQ_API_KEY, env.OPENROUTER_API_KEY, env.NIM_API_KEY, env.MISTRAL_API_KEY);
       const copy = await synthesizeCopy(segment, segmentConfig, llm);
       const html = buildHtml(segment, copy);
       return json({ segment, copy, html });
@@ -406,6 +408,8 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
         { provider: 'groq', model: 'llama-3.1-8b-instant', temperature: 0.1, max_tokens: 5000 },
         env.GROQ_API_KEY,
         env.OPENROUTER_API_KEY,
+        env.NIM_API_KEY,
+        env.MISTRAL_API_KEY,
       );
 
       const captured: Array<{ id: string; strength: number; profile: FrictionProfile }> = [];
@@ -453,13 +457,13 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
     }
 
     if (path === '/discover' && method === 'POST') {
-      if (!env.GROQ_API_KEY && !env.OPENROUTER_API_KEY)
+      if (!env.GROQ_API_KEY && !env.OPENROUTER_API_KEY && !env.NIM_API_KEY && !env.MISTRAL_API_KEY)
         return json({ error: 'LLM key not configured' }, 503);
 
       try {
         const cfg = await getConfig(env.DB);
         const discoverCfg = { ...(cfg.discover ?? { max_clusters: 10, min_signals: 3 }) };
-        const llm = new LLMChain(cfg.llm, env.GROQ_API_KEY, env.OPENROUTER_API_KEY);
+        const llm = new LLMChain(cfg.llm, env.GROQ_API_KEY, env.OPENROUTER_API_KEY, env.NIM_API_KEY, env.MISTRAL_API_KEY);
         const notifier = new EmailNotifier(env.EMAIL, cfg.notifications);
 
         const texts = await collectDiscoveryTexts();
@@ -489,7 +493,7 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
       };
       const cfg = await getConfig(env.DB);
       const d1repo = new D1Repo(env.DB);
-      const llm = new LLMChain(cfg.llm, env.GROQ_API_KEY, env.OPENROUTER_API_KEY);
+      const llm = new LLMChain(cfg.llm, env.GROQ_API_KEY, env.OPENROUTER_API_KEY, env.NIM_API_KEY, env.MISTRAL_API_KEY);
       const notifier = new EmailNotifier(env.EMAIL, cfg.notifications);
       const results = await runScore(
         { signals: d1repo, opportunities: d1repo, discovery: d1repo },
@@ -505,14 +509,14 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
       const { description } = await request.json() as { description?: string };
       if (!description || typeof description !== 'string' || !description.trim())
         return json({ error: 'description required' }, 400);
-      if (!env.GROQ_API_KEY && !env.OPENROUTER_API_KEY)
-        return json({ error: 'No LLM key configured (GROQ_API_KEY or OPENROUTER_API_KEY required)' }, 503);
+      if (!env.GROQ_API_KEY && !env.OPENROUTER_API_KEY && !env.NIM_API_KEY && !env.MISTRAL_API_KEY)
+        return json({ error: 'No LLM key configured (set GROQ_API_KEY, OPENROUTER_API_KEY, NIM_API_KEY, or MISTRAL_API_KEY)' }, 503);
       const id   = crypto.randomUUID().slice(0, 12);
       const now  = new Date().toISOString();
       const d1repo = new D1Repo(env.DB);
       await d1repo.createMarketTest(id, description.trim(), now);
       const cfg = await getConfig(env.DB);
-      const llm = new LLMChain(cfg.llm, env.GROQ_API_KEY, env.OPENROUTER_API_KEY);
+      const llm = new LLMChain(cfg.llm, env.GROQ_API_KEY, env.OPENROUTER_API_KEY, env.NIM_API_KEY, env.MISTRAL_API_KEY);
       ctx.waitUntil(runMarketTest(id, description.trim(), llm, d1repo));
       return json({ test_id: id });
     }
@@ -542,7 +546,7 @@ const scheduled: ExportedHandlerScheduledHandler<Env> = async (_event, env, ctx)
   ctx.waitUntil((async () => {
     const cfg = await getConfig(env.DB);
     const d1repo = new D1Repo(env.DB);
-    const llm = new LLMChain(cfg.llm, env.GROQ_API_KEY, env.OPENROUTER_API_KEY);
+    const llm = new LLMChain(cfg.llm, env.GROQ_API_KEY, env.OPENROUTER_API_KEY, env.NIM_API_KEY, env.MISTRAL_API_KEY);
     const notifier = new EmailNotifier(env.EMAIL, cfg.notifications);
 
     // Collect

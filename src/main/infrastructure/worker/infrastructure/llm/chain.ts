@@ -2,34 +2,48 @@ import type { ILLMProvider } from '../../application/ports.js';
 import type { Config } from '../../domain/types.js';
 
 const PROVIDERS = {
-  groq: { url: 'https://api.groq.com/openai/v1/chat/completions' },
+  groq:       { url: 'https://api.groq.com/openai/v1/chat/completions' },
   openrouter: { url: 'https://openrouter.ai/api/v1/chat/completions' },
+  nim:        { url: 'https://integrate.api.nvidia.com/v1/chat/completions' },
+  mistral:    { url: 'https://api.mistral.ai/v1/chat/completions' },
 } as const;
 
+type ProviderKey = keyof typeof PROVIDERS;
+
 export class LLMChain implements ILLMProvider {
+  private readonly keys: Record<ProviderKey, string | undefined>;
+
   constructor(
     private readonly cfg: Config['llm'],
-    private readonly groqApiKey: string | undefined,
-    private readonly openrouterApiKey: string | undefined,
-  ) {}
+    groqApiKey: string | undefined,
+    openrouterApiKey: string | undefined,
+    nimApiKey: string | undefined,
+    mistralApiKey: string | undefined,
+  ) {
+    this.keys = { groq: groqApiKey, openrouter: openrouterApiKey, nim: nimApiKey, mistral: mistralApiKey };
+  }
 
   async complete(prompt: string, maxTokens: number): Promise<string> {
-    // Try Groq first
-    if (this.groqApiKey) {
+    const preferred = this.cfg.provider as ProviderKey | undefined;
+
+    // If a specific provider is configured and its key is available, use it directly
+    if (preferred && preferred in PROVIDERS && this.keys[preferred]) {
+      return this._call(PROVIDERS[preferred].url, this.keys[preferred]!, this.cfg.model, prompt, maxTokens);
+    }
+
+    // Legacy fallback: groq → openrouter
+    if (this.keys.groq) {
       try {
-        return await this._call(PROVIDERS.groq.url, this.groqApiKey, this.cfg.model, prompt, maxTokens);
+        return await this._call(PROVIDERS.groq.url, this.keys.groq, this.cfg.model, prompt, maxTokens);
       } catch (e) {
-        const message = e instanceof Error ? e.message : String(e);
-        console.error('groq failed, falling back:', message);
+        console.error('groq failed, falling back:', e instanceof Error ? e.message : String(e));
       }
     }
-
-    // Fall back to OpenRouter
-    if (this.openrouterApiKey) {
-      return await this._call(PROVIDERS.openrouter.url, this.openrouterApiKey, this.cfg.model, prompt, maxTokens);
+    if (this.keys.openrouter) {
+      return this._call(PROVIDERS.openrouter.url, this.keys.openrouter, this.cfg.model, prompt, maxTokens);
     }
 
-    throw new Error('No LLM key available (GROQ_API_KEY or OPENROUTER_API_KEY required)');
+    throw new Error('No LLM key available (set GROQ_API_KEY, OPENROUTER_API_KEY, NIM_API_KEY, or MISTRAL_API_KEY)');
   }
 
   private async _call(

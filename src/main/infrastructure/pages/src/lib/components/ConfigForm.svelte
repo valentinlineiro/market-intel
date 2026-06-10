@@ -96,6 +96,8 @@
           <select bind:value={llm.provider}>
             <option value="groq">Groq</option>
             <option value="openrouter">OpenRouter</option>
+            <option value="nim">NVIDIA NIM</option>
+            <option value="mistral">Mistral</option>
             <option value="anthropic">Anthropic</option>
           </select>
         </div>
