@@ -564,16 +564,19 @@ export class D1Repo implements ISignalRepo, IOpportunityRepo, ILeadRepo, IDiscov
     signals: number;
     opportunities: number;
     leads: number;
+    analyzed_count: number;
   }> {
-    const [sigRow, oppRow, leadRow] = await Promise.all([
+    const [sigRow, oppRow, leadRow, analyzedRow] = await Promise.all([
       this.db.prepare('SELECT COUNT(*) as n FROM signals').first<Record<string, unknown>>(),
       this.db.prepare('SELECT COUNT(*) as n FROM opportunities').first<Record<string, unknown>>(),
       this.db.prepare('SELECT COUNT(*) as n FROM leads').first<Record<string, unknown>>(),
+      this.db.prepare('SELECT COUNT(*) as n FROM signals WHERE friction_analysis IS NOT NULL').first<Record<string, unknown>>(),
     ]);
     return {
-      signals:       (sigRow?.['n'] as number)  ?? 0,
-      opportunities: (oppRow?.['n'] as number)  ?? 0,
-      leads:         (leadRow?.['n'] as number) ?? 0,
+      signals:        (sigRow?.['n']      as number) ?? 0,
+      opportunities:  (oppRow?.['n']      as number) ?? 0,
+      leads:          (leadRow?.['n']     as number) ?? 0,
+      analyzed_count: (analyzedRow?.['n'] as number) ?? 0,
     };
   }
 

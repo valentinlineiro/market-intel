@@ -754,6 +754,7 @@ async function handleGetStats(d1repo: D1Repo): Promise<Response> {
   return json({
     total_signals:       stats.signals,
     total_opportunities: stats.opportunities,
+    analyzed_count:      stats.analyzed_count,
     by_segment,
     top_opportunity: topRow ?? null,
     backend: 'worker+d1',
