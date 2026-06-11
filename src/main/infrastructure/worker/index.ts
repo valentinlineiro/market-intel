@@ -761,7 +761,8 @@ async function handleGetSignals(db: D1Database, params: URLSearchParams): Promis
   const segment = params.get('segment') || null;
   const source  = params.get('source')  || null;
   const q       = params.get('q')       || null;
-  const sortCol = params.get('sort') === 'signal_strength' ? 'signal_strength' : 'collected_at';
+  const validSorts = new Set(['collected_at', 'signal_strength', 'segment', 'source']);
+  const sortCol = validSorts.has(params.get('sort') ?? '') ? params.get('sort')! : 'collected_at';
   const sortDir = params.get('order') === 'asc' ? 'ASC' : 'DESC';
   const limit   = Math.min(Math.max(1, parseInt(params.get('limit') ?? '50') || 50), 200);
   const offset  = Math.max(0, parseInt(params.get('offset') ?? '0') || 0);

@@ -88,8 +88,8 @@
       <thead>
         <tr>
           <th class="sortable" on:click={() => sortBy('collected_at')}>Fecha{sortArrow('collected_at')}</th>
-          <th>Segmento</th>
-          <th>Fuente</th>
+          <th class="sortable" on:click={() => sortBy('segment')}>Segmento{sortArrow('segment')}</th>
+          <th class="sortable" on:click={() => sortBy('source')}>Fuente{sortArrow('source')}</th>
           <th class="col-text">Texto</th>
           <th class="sortable" on:click={() => sortBy('signal_strength')}>Fuerza{sortArrow('signal_strength')}</th>
         </tr>
