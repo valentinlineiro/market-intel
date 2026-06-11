@@ -1,5 +1,5 @@
 ## TASK-008: Retroactive task capture — src/main/infrastructure/worker/index.ts modified 7 times without governance
-**Meta:** P3 | S | READY | Focus:no | 2-code-generation | local | docs/
+**Meta:** P3 | S | READY | Focus:yes | 2-code-generation | local | docs/
 **Depends:** none
 
 ### Acceptance Criteria
