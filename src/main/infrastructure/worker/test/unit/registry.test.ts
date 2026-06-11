@@ -4,6 +4,7 @@ import type { Config } from '../../domain/types.js';
 import type { Env } from '../../index.js';
 
 const MINIMAL_CFG: Config = {
+  segments: {},
   score: { top_n: 10, min_score: 5, dry_run: true },
   llm: { provider: 'groq', model: 'llama-3.1-8b-instant', temperature: 0.3, max_tokens: 1024 },
   discover: { max_clusters: 10, min_signals: 3 },

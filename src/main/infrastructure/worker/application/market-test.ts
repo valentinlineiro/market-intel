@@ -1,6 +1,5 @@
 import type { ISignalRepo, ILLMProvider, IMarketTestRepo } from './ports.js';
 import type { Signal, GnewsSegmentConfig, MarketTestResult, FrictionProfile } from '../domain/types.js';
-import { collectGnews } from '../infrastructure/collectors/gnews.js';
 import { runCollect } from './collect.js';
 import {
   dolorScore,
@@ -84,6 +83,7 @@ export async function runMarketTest(
   description: string,
   llm: ILLMProvider,
   repo: IMarketTestRepo,
+  collectSignals: (config: GnewsSegmentConfig) => Promise<Signal[]>,
 ): Promise<void> {
   const now = () => new Date().toISOString();
 
@@ -96,10 +96,7 @@ export async function runMarketTest(
 
     const signalRepo = new InMemorySignalRepo();
     const { stats } = await runCollect(signalRepo, [
-      {
-        id: 'gnews',
-        collect: () => collectGnews({ 'market-test': config }, ''),
-      },
+      { id: 'gnews', collect: () => collectSignals(config) },
     ]);
 
     // Check if any collector failed

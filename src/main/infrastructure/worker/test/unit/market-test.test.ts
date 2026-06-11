@@ -3,9 +3,6 @@ import { runMarketTest, InMemorySignalRepo } from '../../application/market-test
 import type { ILLMProvider, IMarketTestRepo } from '../../application/ports.js';
 import type { GnewsSegmentConfig, MarketTest, MarketTestResult, Signal } from '../../domain/types.js';
 
-vi.mock('../../infrastructure/collectors/gnews.js', () => ({
-  collectGnews: vi.fn().mockResolvedValue([]),
-}));
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -133,8 +130,10 @@ describe('runMarketTest', () => {
     repo.store.set('t1', { id: 't1', description: 'dentists in pain', status: 'pending', created_at: now, updated_at: now, generated_config: null, result: null, error: null });
   });
 
+  const noOpCollect = async () => [];
+
   it('transitions status to done and populates result', async () => {
-    await runMarketTest('t1', 'dentists in pain', makeMockLlm(), repo);
+    await runMarketTest('t1', 'dentists in pain', makeMockLlm(), repo, noOpCollect);
     const test = repo.store.get('t1');
     expect(test?.status).toBe('done');
     expect(test?.result).toBeDefined();
@@ -147,13 +146,13 @@ describe('runMarketTest', () => {
   it('exits without mutation if test is already claimed (not pending)', async () => {
     const now = new Date().toISOString();
     repo.store.set('t2', { id: 't2', description: 'lawyers', status: 'running', created_at: now, updated_at: now, generated_config: null, result: null, error: null });
-    await runMarketTest('t2', 'lawyers', makeMockLlm(), repo);
+    await runMarketTest('t2', 'lawyers', makeMockLlm(), repo, noOpCollect);
     expect(repo.store.get('t2')?.status).toBe('running');
   });
 
   it('sets status=failed and stores error message when LLM throws', async () => {
     const failLlm: ILLMProvider = { complete: vi.fn().mockRejectedValue(new Error('LLM unavailable')) };
-    await runMarketTest('t1', 'dentists in pain', failLlm, repo);
+    await runMarketTest('t1', 'dentists in pain', failLlm, repo, noOpCollect);
     const test = repo.store.get('t1');
     expect(test?.status).toBe('failed');
     expect(test?.error).toBe('LLM unavailable');
@@ -161,16 +160,15 @@ describe('runMarketTest', () => {
 
   it('sets status=failed when LLM returns malformed JSON', async () => {
     const badLlm: ILLMProvider = { complete: vi.fn().mockResolvedValue('not json at all') };
-    await runMarketTest('t1', 'dentists in pain', badLlm, repo);
+    await runMarketTest('t1', 'dentists in pain', badLlm, repo, noOpCollect);
     const test = repo.store.get('t1');
     expect(test?.status).toBe('failed');
     expect(test?.error).toBeDefined();
   });
 
-  it('sets status=failed when collectGnews throws', async () => {
-    const { collectGnews } = await import('../../infrastructure/collectors/gnews.js');
-    vi.mocked(collectGnews).mockRejectedValueOnce(new Error('network error'));
-    await runMarketTest('t1', 'dentists in pain', makeMockLlm(), repo);
+  it('sets status=failed when collectSignals throws', async () => {
+    const failCollect = async () => { throw new Error('network error'); };
+    await runMarketTest('t1', 'dentists in pain', makeMockLlm(), repo, failCollect);
     const test = repo.store.get('t1');
     expect(test?.status).toBe('failed');
     expect(test?.error).toBe('network error');
