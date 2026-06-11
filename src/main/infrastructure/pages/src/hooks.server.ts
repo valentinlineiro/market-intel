@@ -1,9 +1,14 @@
 import { redirect } from '@sveltejs/kit';
-import type { Handle } from '@sveltejs/kit';
+import type { Handle, HandleServerError } from '@sveltejs/kit';
 import { validateSession } from '$lib/auth.js';
 
 const PUBLIC_PATHS = new Set(['/login', '/api/signup']);
 const PUBLIC_PREFIXES = ['/landings/'];
+
+export const handleError: HandleServerError = ({ error, event }) => {
+  console.error('[sveltekit error]', event.url.pathname, error);
+  return { message: String(error) };
+};
 
 export const handle: Handle = async ({ event, resolve }) => {
   const path = event.url.pathname;

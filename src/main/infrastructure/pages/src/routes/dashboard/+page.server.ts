@@ -51,7 +51,7 @@ export const load: PageServerLoad = async ({ platform }) => {
     safeJson<{ config: Config }>(configRes, { config: {} as Config }),
     safeJson<{ runs: CronRun[]; collectors: CollectorHealth[] }>(pipelineRes, { runs: [], collectors: [] }),
     safeJson<GapEntry[]>(gapRes, []),
-    safeJson<SignalRow[]>(signalsRes, []),
+    safeJson<{ results: SignalRow[] }>(signalsRes, { results: [] }),
     safeJson<PainProfile[]>(painRes, []),
     safeJson<{ weeks: number; rows: VelocityRow[] }>(velocityRes, { weeks: 12, rows: [] }),
   ]);
@@ -64,7 +64,7 @@ export const load: PageServerLoad = async ({ platform }) => {
     config:        configData.config,
     pipeline:      pipelineData,
     gapRadar:      gapData,
-    signals:       signalsData,
+    signals:       signalsData.results ?? [],
     painProfiles:  painData,
     velocity:      velocityData.rows,
   };
