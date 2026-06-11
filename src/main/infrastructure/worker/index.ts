@@ -225,8 +225,8 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
     if (path === '/pipeline-status' && method === 'GET') {
       const repo = new D1Repo(env.DB);
       const [runs, collectors] = await Promise.all([
-        repo.getRecentCronRuns(5),
-        repo.getCollectorHealth(),
+        repo.getRecentCronRuns(5).catch(() => [] as import('./domain/types.js').CronRun[]),
+        repo.getCollectorHealth().catch(() => [] as Array<{ collector_id: string; last_run_at: string; signal_count: number; error: string | null }>),
       ]);
       return ajson({ runs, collectors });
     }
@@ -234,7 +234,7 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
     if (path.startsWith('/pipeline-status/') && method === 'GET') {
       const runId = decodeURIComponent(path.slice('/pipeline-status/'.length));
       const repo = new D1Repo(env.DB);
-      const runs = await repo.getRecentCronRuns(20);
+      const runs = await repo.getRecentCronRuns(20).catch(() => [] as import('./domain/types.js').CronRun[]);
       const run = runs.find(r => r.id === runId) ?? null;
       return ajson({ run });
     }
@@ -758,12 +758,28 @@ export default { fetch: handleFetch, scheduled } satisfies ExportedHandler<Env>;
 // ---------------------------------------------------------------------------
 
 async function handleGetSignals(db: D1Database, params: URLSearchParams): Promise<Response> {
-  const segment = params.get('segment');
-  const limit   = Math.min(parseInt(params.get('limit') ?? '100') || 100, 500);
-  const { results } = segment
-    ? await db.prepare('SELECT * FROM signals WHERE segment = ? ORDER BY collected_at DESC LIMIT ?').bind(segment, limit).all()
-    : await db.prepare('SELECT * FROM signals ORDER BY collected_at DESC LIMIT ?').bind(limit).all();
-  return json({ results });
+  const segment = params.get('segment') || null;
+  const source  = params.get('source')  || null;
+  const q       = params.get('q')       || null;
+  const sortCol = params.get('sort') === 'signal_strength' ? 'signal_strength' : 'collected_at';
+  const sortDir = params.get('order') === 'asc' ? 'ASC' : 'DESC';
+  const limit   = Math.min(Math.max(1, parseInt(params.get('limit') ?? '50') || 50), 200);
+  const offset  = Math.max(0, parseInt(params.get('offset') ?? '0') || 0);
+
+  const conds: string[]  = [];
+  const vals: unknown[]  = [];
+  if (segment) { conds.push('segment = ?');     vals.push(segment); }
+  if (source)  { conds.push('source = ?');      vals.push(source); }
+  if (q)       { conds.push('raw_text LIKE ?'); vals.push(`%${q}%`); }
+  const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
+
+  const [countRow, { results }, { results: sourceRows }] = await Promise.all([
+    db.prepare(`SELECT COUNT(*) as n FROM signals ${where}`).bind(...vals).first<{ n: number }>(),
+    db.prepare(`SELECT * FROM signals ${where} ORDER BY ${sortCol} ${sortDir} LIMIT ? OFFSET ?`).bind(...vals, limit, offset).all(),
+    db.prepare('SELECT DISTINCT source FROM signals ORDER BY source').all<{ source: string }>(),
+  ]);
+
+  return json({ results, total: countRow?.n ?? 0, sources: (sourceRows ?? []).map(r => r.source) });
 }
 
 async function handleInsertSignal(db: D1Database, signal: Record<string, unknown>): Promise<Response> {
@@ -802,8 +818,8 @@ async function handleCountSignals(db: D1Database, params: URLSearchParams): Prom
 async function handleGetOpportunities(db: D1Database, params: URLSearchParams): Promise<Response> {
   const status = params.get('status');
   const { results } = status
-    ? await db.prepare('SELECT * FROM opportunities WHERE status = ? ORDER BY score DESC').bind(status).all()
-    : await db.prepare('SELECT * FROM opportunities ORDER BY score DESC').all();
+    ? await db.prepare('SELECT * FROM opportunities WHERE status = ? ORDER BY score DESC LIMIT 200').bind(status).all()
+    : await db.prepare('SELECT * FROM opportunities ORDER BY score DESC LIMIT 200').all();
   return json({ results });
 }
 

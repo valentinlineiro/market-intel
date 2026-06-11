@@ -278,17 +278,19 @@
         <LeadsTable bySegment={data.leads.by_segment} total={data.leads.total} />
       {:else}
         <!-- señales (default fallback) -->
-        {#if data.signals.length === 0}
-          <div class="tab-empty">Sin señales todavía. Haz sync para recoger las primeras señales.</div>
-        {:else}
-          {#if data.velocity.length > 0}
-            <div class="velocity-section">
-              <div class="velocity-label">Señales por semana (todos los segmentos)</div>
-              <VelocityChart rows={data.velocity} segment={null} />
-            </div>
-          {/if}
-          <SignalsTable signals={data.signals} />
+        {#if data.velocity.length > 0}
+          <div class="velocity-section">
+            <div class="velocity-label">Señales por semana (todos los segmentos)</div>
+            <VelocityChart rows={data.velocity} segment={null} />
+          </div>
         {/if}
+        <SignalsTable
+          signals={data.signals}
+          total={data.signalsTotal}
+          sources={data.signalsSources}
+          segments={Object.keys(data.stats.by_segment)}
+          page={data.signalsPage}
+        />
       {/if}
     {/if}
   </main>

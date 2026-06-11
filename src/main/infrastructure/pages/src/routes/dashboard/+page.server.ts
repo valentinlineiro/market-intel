@@ -26,9 +26,25 @@ function failedResponse(): Response {
   return new Response('{}', { status: 503 });
 }
 
-export const load: PageServerLoad = async ({ platform }) => {
+const SIG_PAGE_SIZE = 50;
+
+export const load: PageServerLoad = async ({ platform, url }) => {
   const env  = (platform as App.Platform).env;
   const base = env.WORKER_URL.replace(/\/$/, '');
+
+  const sigOffset  = Math.max(0, parseInt(url.searchParams.get('offset')  ?? '0') || 0);
+  const sigSegment = url.searchParams.get('segment') ?? '';
+  const sigSource  = url.searchParams.get('source')  ?? '';
+  const sigQ       = url.searchParams.get('q')       ?? '';
+  const sigSort    = url.searchParams.get('sort')    ?? 'collected_at';
+  const sigOrder   = url.searchParams.get('order')   ?? 'desc';
+
+  const sigParams = new URLSearchParams({ limit: String(SIG_PAGE_SIZE), offset: String(sigOffset) });
+  if (sigSegment)              sigParams.set('segment', sigSegment);
+  if (sigSource)               sigParams.set('source',  sigSource);
+  if (sigQ)                    sigParams.set('q',       sigQ);
+  if (sigSort !== 'collected_at') sigParams.set('sort', sigSort);
+  if (sigOrder !== 'desc')        sigParams.set('order', sigOrder);
 
   const [statsRes, oppsRes, leadsRes, discoveryRes, configRes, pipelineRes, gapRes, signalsRes, painRes, velocityRes] = await Promise.all([
     safeFetch(fetch(`${base}/public/stats`), failedResponse()),
@@ -38,7 +54,7 @@ export const load: PageServerLoad = async ({ platform }) => {
     safeFetch(fetch(`${base}/public/config`), failedResponse()),
     safeFetch(workerFetch(`${base}/pipeline-status`, env), failedResponse()),
     safeFetch(workerFetch(`${base}/gap-radar`, env), failedResponse()),
-    safeFetch(workerFetch(`${base}/signals?limit=200`, env), failedResponse()),
+    safeFetch(workerFetch(`${base}/signals?${sigParams}`, env), failedResponse()),
     safeFetch(fetch(`${base}/public/pain-profiles`), failedResponse()),
     safeFetch(workerFetch(`${base}/stats/velocity?weeks=12`, env), failedResponse()),
   ]);
@@ -51,7 +67,7 @@ export const load: PageServerLoad = async ({ platform }) => {
     safeJson<{ config: Config }>(configRes, { config: {} as Config }),
     safeJson<{ runs: CronRun[]; collectors: CollectorHealth[] }>(pipelineRes, { runs: [], collectors: [] }),
     safeJson<GapEntry[]>(gapRes, []),
-    safeJson<{ results: SignalRow[] }>(signalsRes, { results: [] }),
+    safeJson<{ results: SignalRow[]; total: number; sources: string[] }>(signalsRes, { results: [], total: 0, sources: [] }),
     safeJson<PainProfile[]>(painRes, []),
     safeJson<{ weeks: number; rows: VelocityRow[] }>(velocityRes, { weeks: 12, rows: [] }),
   ]);
@@ -64,7 +80,18 @@ export const load: PageServerLoad = async ({ platform }) => {
     config:        configData.config,
     pipeline:      pipelineData,
     gapRadar:      gapData,
-    signals:       signalsData.results ?? [],
+    signals:        signalsData.results ?? [],
+    signalsTotal:   signalsData.total   ?? 0,
+    signalsSources: signalsData.sources ?? [],
+    signalsPage: {
+      offset:  sigOffset,
+      limit:   SIG_PAGE_SIZE,
+      q:       sigQ,
+      segment: sigSegment,
+      source:  sigSource,
+      sort:    sigSort,
+      order:   sigOrder,
+    },
     painProfiles:  painData,
     velocity:      velocityData.rows,
   };

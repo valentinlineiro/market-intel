@@ -178,7 +178,7 @@ export class D1Repo implements ISignalRepo, IOpportunityRepo, ILeadRepo, IDiscov
       return (results ?? []).map(rowToSignal);
     }
     const { results } = await this.db
-      .prepare('SELECT * FROM opportunities ORDER BY score DESC')
+      .prepare('SELECT * FROM opportunities ORDER BY score DESC LIMIT 200')
       .all<Record<string, unknown>>();
     return (results ?? []).map(rowToOpportunity);
   }
