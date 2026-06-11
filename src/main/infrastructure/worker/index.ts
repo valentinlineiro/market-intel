@@ -106,6 +106,7 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
     path === '/public/leads' ||
     path === '/public/discovery' ||
     path === '/public/config' ||
+    path === '/public/pain-profiles' ||
     path.startsWith('/public/landings/')
   );
   const isPublicPost = method === 'POST' && (
@@ -122,6 +123,10 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
       if (path === '/public/discovery')     return await handleGetDiscovery(d1repo);
       if (path === '/public/config')        return await handleGetConfig(env.DB);
       if (path === '/public/opportunities') return await handleGetOpportunities(env.DB, url.searchParams);
+      if (path === '/public/pain-profiles') {
+        const profiles = await d1repo.getPainProfiles();
+        return json(profiles);
+      }
 
       if (path.startsWith('/public/landings/')) {
         const rest = path.slice('/public/landings/'.length);

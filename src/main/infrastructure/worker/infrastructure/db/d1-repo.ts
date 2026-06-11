@@ -580,6 +580,40 @@ export class D1Repo implements ISignalRepo, IOpportunityRepo, ILeadRepo, IDiscov
     };
   }
 
+  async getPainProfiles(): Promise<Array<{
+    segment: string;
+    problem_type: string;
+    intensity: number;
+    pain_summary: string;
+    confidence: number;
+    count: number;
+  }>> {
+    const { results } = await this.db
+      .prepare(`
+        SELECT
+          segment,
+          json_extract(friction_analysis, '$.problem_type') as problem_type,
+          AVG(json_extract(friction_analysis, '$.intensity')) as intensity,
+          json_extract(friction_analysis, '$.pain_summary') as pain_summary,
+          AVG(json_extract(friction_analysis, '$.confidence')) as confidence,
+          COUNT(*) as count
+        FROM signals
+        WHERE friction_analysis IS NOT NULL
+        GROUP BY segment, json_extract(friction_analysis, '$.pain_summary')
+        ORDER BY segment, intensity DESC
+        LIMIT 100
+      `)
+      .all<Record<string, unknown>>();
+    return (results ?? []).map(r => ({
+      segment:      r['segment']      as string,
+      problem_type: r['problem_type'] as string ?? 'unknown',
+      intensity:    Number(r['intensity'])   || 0,
+      pain_summary: r['pain_summary'] as string ?? '',
+      confidence:   Number(r['confidence'])  || 0,
+      count:        Number(r['count'])       || 0,
+    }));
+  }
+
   // ── IMarketTestRepo ──────────────────────────────────────────────────────
 
   async createMarketTest(id: string, description: string, now: string): Promise<void> {
