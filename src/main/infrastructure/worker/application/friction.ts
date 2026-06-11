@@ -25,9 +25,7 @@ Devuelve SOLO un array JSON válido (sin markdown, sin explicación). Cada eleme
 Debes responder con TODAS las señales. Cada "index" debe coincidir exactamente con el listado.`;
 
 function shouldAnalyze(signal: Signal): boolean {
-  if (signal.friction_analysis != null) return false;
-  if (signal.source === 'github') return true;
-  return (signal.signal_strength ?? 0) >= 0.35;
+  return signal.friction_analysis == null;
 }
 
 function formatBatch(signals: Signal[]): string {
