@@ -673,7 +673,7 @@ async function runCronJob(env: Env, trigger: CronRun['trigger'] = 'scheduled', e
 
     try {
       const toAnalyze = await d1repo.getUnanalyzed();
-      await analyzeFriction(toAnalyze, llm, d1repo);
+      await analyzeFriction(toAnalyze, llm, d1repo, 0.85, cfg.friction?.min_strength ?? 0);
       analyzedCount = toAnalyze.length;
     } catch (e) {
       console.error('[cron] friction analysis failed (non-fatal):', e instanceof Error ? e.message : e);

@@ -24,8 +24,9 @@ Devuelve SOLO un array JSON válido (sin markdown, sin explicación). Cada eleme
 
 Debes responder con TODAS las señales. Cada "index" debe coincidir exactamente con el listado.`;
 
-function shouldAnalyze(signal: Signal): boolean {
-  return signal.friction_analysis == null;
+function shouldAnalyze(signal: Signal, minStrength: number): boolean {
+  if (signal.friction_analysis != null) return false;
+  return (signal.signal_strength ?? 0) >= minStrength;
 }
 
 function formatBatch(signals: Signal[]): string {
@@ -54,8 +55,9 @@ export async function analyzeFriction(
   llm: ILLMProvider,
   repo: ISignalRepo,
   clusterThreshold = 0.85,
+  minStrength = 0,
 ): Promise<void> {
-  const eligible = signals.filter(shouldAnalyze);
+  const eligible = signals.filter(s => shouldAnalyze(s, minStrength));
   if (!eligible.length) return;
 
   // Cluster similar signals so only one representative per cluster hits the LLM.

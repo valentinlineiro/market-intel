@@ -85,6 +85,7 @@ export interface Config {
   segments: Record<string, unknown>;
   score: Record<string, unknown>;
   llm: Record<string, unknown>;
+  friction?: Record<string, unknown>;
   discover: Record<string, unknown>;
   notifications: Record<string, unknown>;
   collectors?: Record<string, unknown>;

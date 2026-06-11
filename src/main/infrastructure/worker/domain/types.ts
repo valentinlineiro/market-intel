@@ -128,6 +128,9 @@ export interface Config {
     temperature: number;
     max_tokens: number;
   };
+  friction: {
+    min_strength: number;
+  };
   discover: {
     max_clusters: number;
     min_signals: number;

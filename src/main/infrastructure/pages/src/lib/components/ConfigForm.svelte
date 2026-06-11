@@ -71,9 +71,10 @@
     return labels[key];
   }
 
-  $: score   = (draft.score         ?? {}) as Record<string, unknown>;
-  $: llm     = (draft.llm           ?? {}) as Record<string, unknown>;
-  $: discover = (draft.discover      ?? {}) as Record<string, unknown>;
+  $: score    = (draft.score          ?? {}) as Record<string, unknown>;
+  $: llm      = (draft.llm            ?? {}) as Record<string, unknown>;
+  $: friction = (draft.friction       ?? {}) as Record<string, unknown>;
+  $: discover = (draft.discover       ?? {}) as Record<string, unknown>;
   $: notifs  = (draft.notifications  ?? {}) as Record<string, unknown>;
   $: collectors = (draft.collectors ?? {}) as Record<string, Record<string, unknown>>;
   $: segmentKeys = Object.keys((draft.segments ?? {}) as Record<string, unknown>);
@@ -125,6 +126,23 @@
           <label>Dry run</label>
           <input type="checkbox" checked={!!score.dry_run} on:change={(e) => { score.dry_run = e.currentTarget.checked; }} />
         </div>
+      </div>
+    {/if}
+  </div>
+
+  <div class="section">
+    <button class="section-head" on:click={() => toggleSection('friction')}>
+      <span class="section-icon" style="background:var(--red-bg);color:var(--red)">⚡</span>
+      <span>Fricción</span>
+      <span class="chevron" class:rotated={openSection === 'friction'}>›</span>
+    </button>
+    {#if openSection === 'friction'}
+      <div class="section-body">
+        <div class="field">
+          <label>Fuerza mínima de señal</label>
+          <input type="number" bind:value={friction.min_strength} min="0" max="1" step="0.05" />
+        </div>
+        <p class="field-hint">0 = analizar todo · 0.35 = solo señales fuertes. Las señales por debajo de este umbral se omiten en el análisis LLM.</p>
       </div>
     {/if}
   </div>
@@ -309,6 +327,7 @@
   .chevron.rotated { transform: rotate(90deg); }
   .field       { display: flex; flex-direction: column; gap: 4px; }
   .field-row   { flex-direction: row; align-items: center; justify-content: space-between; }
+  .field-hint  { font-size: 0.68rem; color: var(--text-dim); line-height: 1.4; margin: 2px 0 0; }
   label        { font-size: 0.72rem; color: var(--text-muted); font-weight: 500; }
   input[type="text"], input[type="email"], input[type="number"], select, textarea {
     padding: 7px 10px; background: var(--bg-input); border: 1px solid var(--border);

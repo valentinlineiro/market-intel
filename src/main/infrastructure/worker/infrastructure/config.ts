@@ -46,6 +46,9 @@ export const DEFAULT_CONFIG: Config = {
     temperature: 0.3,
     max_tokens: 1024,
   },
+  friction: {
+    min_strength: 0,
+  },
   discover: {
     max_clusters: 10,
     min_signals: 3,
