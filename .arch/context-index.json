@@ -1,7 +1,7 @@
 {
   "adrTaskLinks": {},
   "adrs": {},
-  "builtAt": "2026-06-11T13:53:23.417Z",
+  "builtAt": "2026-06-11T14:21:34.477Z",
   "failures": {},
   "files": {},
   "guidelineFailureLinks": {},
@@ -180,15 +180,16 @@
       }
     },
     "TASK-008": {
-      "commitCount": 2,
+      "commitCount": 3,
       "commitRefOverflow": false,
-      "lastCommitDate": "2026-06-11T15:53:23+02:00",
+      "lastCommitDate": "2026-06-11T16:21:34+02:00",
       "recentCommitRefs": [
         "2ad3039",
-        "d778539"
+        "d778539",
+        "e3a4c91"
       ],
       "touchedFrequency": {
-        ".arch/focus-ledger.jsonl": 1,
+        ".arch/focus-ledger.jsonl": 2,
         "docs/tasks/TASK-008.md": 2
       }
     },
@@ -215,14 +216,29 @@
       }
     },
     "TASK-011": {
-      "commitCount": 1,
+      "commitCount": 2,
       "commitRefOverflow": false,
-      "lastCommitDate": "2026-06-11T15:53:17+02:00",
+      "lastCommitDate": "2026-06-11T15:58:31+02:00",
       "recentCommitRefs": [
+        "50102c9",
         "80b4026"
       ],
       "touchedFrequency": {
+        ".arch/chronicle.jsonl": 1,
+        "docs/EVENTS.md": 1,
+        "docs/archive/TASK-011.md": 1,
         "docs/tasks/TASK-011.md": 1
+      }
+    },
+    "TASK-012": {
+      "commitCount": 1,
+      "commitRefOverflow": false,
+      "lastCommitDate": "2026-06-11T16:21:33+02:00",
+      "recentCommitRefs": [
+        "4e2f93b"
+      ],
+      "touchedFrequency": {
+        "docs/tasks/TASK-012.md": 1
       }
     }
   },

@@ -24,8 +24,8 @@
 
   export let data: PageData;
 
-  type Tab = 'senales' | 'dolor' | 'segmentos' | 'oportunidades' | 'radar' | 'leads';
-  let activeTab: Tab = 'senales';
+  type Tab = 'info' | 'dolor' | 'oportunidades' | 'leads';
+  let activeTab: Tab = 'info';
 
   // Config overlay
   let showConfig = false;
@@ -133,10 +133,10 @@
   // ── Pipeline stage derivation ───────────────────────────────────────────────
   $: pipelineStages = [
     {
-      key:   'senales',
-      label: 'Señales',
-      sub:   data.stats.total_signals > 0 ? `${data.stats.total_signals}` : '—',
-      state: (data.stats.total_signals > 0 ? 'done' : 'pending') as 'done' | 'running' | 'pending',
+      key:   'info',
+      label: 'Info',
+      sub:   syncRunning ? 'en curso' : data.stats.total_signals > 0 ? `${data.stats.total_signals} señales` : '—',
+      state: (syncRunning ? 'running' : data.stats.total_signals > 0 ? 'done' : 'pending') as 'done' | 'running' | 'pending',
     },
     {
       key:   'dolor',
@@ -145,28 +145,10 @@
       state: (data.stats.analyzed_count > 0 ? 'done' : 'pending') as 'done' | 'running' | 'pending',
     },
     {
-      key:   'segmentos',
-      label: 'Segmentos',
-      sub:   syncRunning && activeTab !== 'segmentos'
-               ? 'en curso'
-               : data.discovery.candidates.length > 0
-                 ? `${data.discovery.candidates.length}`
-                 : '—',
-      state: (syncRunning
-        ? 'running'
-        : data.discovery.candidates.length > 0 ? 'done' : 'pending') as 'done' | 'running' | 'pending',
-    },
-    {
       key:   'oportunidades',
       label: 'Oportunidades',
       sub:   data.opportunities.length > 0 ? `${data.opportunities.length}` : '—',
       state: (data.opportunities.length > 0 ? 'done' : 'pending') as 'done' | 'running' | 'pending',
-    },
-    {
-      key:   'radar',
-      label: 'Radar',
-      sub:   data.gapRadar.length > 0 ? `${data.gapRadar.filter(e => !e.has_landing).length} huecos` : '—',
-      state: (data.gapRadar.length > 0 ? 'done' : 'pending') as 'done' | 'running' | 'pending',
     },
     {
       key:   'leads',
@@ -254,44 +236,53 @@
           {/if}
         </form>
       </div>
+
+    {:else if !$navigating && !refreshing && activeTab === 'info'}
+      {#if data.velocity.length > 0}
+        <div class="velocity-section">
+          <div class="velocity-label">Actividad de señales (últimas 12 semanas)</div>
+          <VelocityChart rows={data.velocity} segment={null} />
+        </div>
+      {/if}
+      {#if data.discovery.candidates.length > 0}
+        <div class="section-label">Segmentos detectados</div>
+        <SectorsGrid discovery={data.discovery} />
+        <div class="section-sep"></div>
+      {/if}
+      <div class="section-label">Señales</div>
+      <SignalsTable
+        signals={data.signals}
+        total={data.signalsTotal}
+        sources={data.signalsSources}
+        segments={Object.keys(data.stats.by_segment)}
+        page={data.signalsPage}
+      />
+
     {:else if !$navigating && !refreshing && activeTab === 'dolor'}
       {#if data.painProfiles.length === 0}
-        <div class="tab-empty">Sin perfiles de dolor. El análisis de fricción se ejecuta automáticamente en el próximo sync.</div>
+        <div class="tab-empty">Sin perfiles de dolor todavía. El análisis de fricción se ejecuta automáticamente en el próximo sync.</div>
       {:else}
         <FrictionList profiles={data.painProfiles} />
       {/if}
-    {:else if !$navigating && !refreshing && activeTab === 'segmentos'}
-      <SectorsGrid discovery={data.discovery} />
-    {:else if !$navigating && !refreshing}
-      {#if activeTab === 'oportunidades'}
-        {#if data.opportunities.length === 0}
-          <div class="tab-empty">Sin oportunidades scored todavía. Necesitas al menos algunas señales analizadas para que aparezcan aquí.</div>
-        {:else}
-          <OpportunityList opportunities={data.opportunities} {diversityMap} velocity={data.velocity} onStatusChange={() => refresh()} />
-        {/if}
-      {:else if activeTab === 'radar'}
+
+    {:else if !$navigating && !refreshing && activeTab === 'oportunidades'}
+      {#if data.opportunities.length === 0}
+        <div class="tab-empty">Sin oportunidades todavía. Necesitas señales analizadas para que aparezcan aquí.</div>
+      {:else}
+        <OpportunityList opportunities={data.opportunities} {diversityMap} velocity={data.velocity} onStatusChange={() => refresh()} />
+      {/if}
+      {#if data.gapRadar.length > 0}
+        <div class="section-sep"></div>
+        <div class="section-label">Huecos sin desplegar</div>
         <GapRadar
           entries={data.gapRadar}
           on:deploy={e => { deploySegment = e.detail; showDeploy = true; }}
         />
-      {:else if activeTab === 'leads'}
-        <LeadsTable bySegment={data.leads.by_segment} total={data.leads.total} />
-      {:else}
-        <!-- señales (default fallback) -->
-        {#if data.velocity.length > 0}
-          <div class="velocity-section">
-            <div class="velocity-label">Señales por semana (todos los segmentos)</div>
-            <VelocityChart rows={data.velocity} segment={null} />
-          </div>
-        {/if}
-        <SignalsTable
-          signals={data.signals}
-          total={data.signalsTotal}
-          sources={data.signalsSources}
-          segments={Object.keys(data.stats.by_segment)}
-          page={data.signalsPage}
-        />
       {/if}
+
+    {:else if !$navigating && !refreshing && activeTab === 'leads'}
+      <LeadsTable bySegment={data.leads.by_segment} total={data.leads.total} />
+
     {/if}
   </main>
 </div>
@@ -370,6 +361,10 @@
   /* Velocity chart header */
   .velocity-section { margin-bottom: 16px; padding: 12px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; }
   .velocity-label   { font-size: 0.68rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+
+  /* Section dividers inside tabs */
+  .section-label { font-size: 0.68rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .06em; margin: 20px 0 10px; }
+  .section-sep   { height: 1px; background: var(--border); margin: 24px 0; }
 
   /* Config overlay */
   .config-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 200; display: flex; justify-content: flex-end; }
