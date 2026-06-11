@@ -1,6 +1,6 @@
 import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
-import type { Stats, DiscoveryResult, Opportunity, Config, GapEntry, SignalRow, PainProfile, CronRun, CollectorHealth, VelocityRow } from '$lib/types.js';
+import type { Stats, DiscoveryResult, Opportunity, Config, GapEntry, SignalRow, PainProfile, CronRun, CollectorHealth, VelocityRow, SourceStat } from '$lib/types.js';
 
 function workerFetch(url: string, env: App.Platform['env'], init?: RequestInit): Promise<Response> {
   return fetch(url, {
@@ -65,7 +65,7 @@ export const load: PageServerLoad = async ({ platform, url }) => {
     safeJson<{ total: number; by_segment: Record<string, { email: string; captured_at: string; price_tier: string | null; lead_score: number }[]> }>(leadsRes, { total: 0, by_segment: {} }),
     safeJson<DiscoveryResult>(discoveryRes, { candidates: [], discovered_at: null, run_id: '' }),
     safeJson<{ config: Config }>(configRes, { config: {} as Config }),
-    safeJson<{ runs: CronRun[]; collectors: CollectorHealth[] }>(pipelineRes, { runs: [], collectors: [] }),
+    safeJson<{ runs: CronRun[]; collectors: CollectorHealth[]; bySource: SourceStat[] }>(pipelineRes, { runs: [], collectors: [], bySource: [] }),
     safeJson<GapEntry[]>(gapRes, []),
     safeJson<{ results: SignalRow[]; total: number; sources: string[] }>(signalsRes, { results: [], total: 0, sources: [] }),
     safeJson<PainProfile[]>(painRes, []),

@@ -224,11 +224,12 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
 
     if (path === '/pipeline-status' && method === 'GET') {
       const repo = new D1Repo(env.DB);
-      const [runs, collectors] = await Promise.all([
+      const [runs, collectors, bySource] = await Promise.all([
         repo.getRecentCronRuns(5).catch(() => [] as import('./domain/types.js').CronRun[]),
         repo.getCollectorHealth().catch(() => [] as Array<{ collector_id: string; last_run_at: string; signal_count: number; error: string | null }>),
+        repo.getSignalsBySource().catch(() => [] as Array<{ source: string; total: number; avg_strength: number; analyzed: number }>),
       ]);
-      return ajson({ runs, collectors });
+      return ajson({ runs, collectors, bySource });
     }
 
     if (path.startsWith('/pipeline-status/') && method === 'GET') {

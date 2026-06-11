@@ -194,6 +194,7 @@
     <PipelineDrawer
       runs={data.pipeline.runs}
       collectors={data.pipeline.collectors}
+      bySource={data.pipeline.bySource ?? []}
       on:close={() => showPipeline = false}
     />
   {/if}

@@ -1,9 +1,10 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import type { CronRun, CollectorHealth } from '$lib/types.js';
+  import type { CronRun, CollectorHealth, SourceStat } from '$lib/types.js';
 
   export let runs:       CronRun[];
   export let collectors: CollectorHealth[];
+  export let bySource:   SourceStat[] = [];
 
   const dispatch = createEventDispatcher<{ close: void }>();
 
@@ -35,6 +36,36 @@
   </div>
 
   <div class="drawer-body">
+
+    <!-- Source quality stats -->
+    {#if bySource.length > 0}
+    <section>
+      <div class="section-label">Fuentes — calidad acumulada</div>
+      <div class="source-table">
+        <div class="source-header">
+          <span>Fuente</span>
+          <span class="right">Señales</span>
+          <span class="right">Fuerza media</span>
+          <span class="right">Analizadas</span>
+        </div>
+        {#each bySource as s}
+          {@const analyzedPct = s.total > 0 ? Math.round(s.analyzed / s.total * 100) : 0}
+          {@const strengthPct = Math.round(s.avg_strength * 100)}
+          <div class="source-row" class:source-weak={s.avg_strength < 0.2 && s.total > 0}>
+            <span class="source-name">{s.source}</span>
+            <span class="right num">{s.total}</span>
+            <span class="right">
+              <span class="mini-bar-wrap">
+                <span class="mini-bar" style="width:{strengthPct}%"></span>
+              </span>
+              <span class="num">{strengthPct}%</span>
+            </span>
+            <span class="right num" class:pct-low={analyzedPct < 20}>{analyzedPct}%</span>
+          </div>
+        {/each}
+      </div>
+    </section>
+    {/if}
 
     <!-- Collector health -->
     <section>
@@ -102,6 +133,19 @@
   section { display: flex; flex-direction: column; gap: 6px; }
   .section-label { font-size: 0.68rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; }
   .empty-hint { font-size: 0.78rem; color: var(--text-dim); padding: 4px 0; }
+
+  /* Source quality table */
+  .source-table  { display: flex; flex-direction: column; gap: 2px; }
+  .source-header { display: grid; grid-template-columns: 1fr 60px 110px 80px; gap: 8px; font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: .04em; padding: 2px 6px 4px; }
+  .source-row    { display: grid; grid-template-columns: 1fr 60px 110px 80px; gap: 8px; align-items: center; font-size: 0.75rem; padding: 4px 6px; border-radius: 5px; }
+  .source-row:hover { background: var(--bg-input); }
+  .source-weak   { opacity: .55; }
+  .source-name   { color: var(--text); font-weight: 600; }
+  .right         { display: flex; align-items: center; justify-content: flex-end; gap: 5px; }
+  .num           { color: var(--text-sub); min-width: 28px; text-align: right; }
+  .pct-low       { color: var(--text-dim); }
+  .mini-bar-wrap { width: 44px; height: 4px; background: var(--border); border-radius: 2px; flex-shrink: 0; }
+  .mini-bar      { height: 100%; background: var(--violet); border-radius: 2px; }
 
   /* Collector grid */
   .collector-grid { display: flex; flex-direction: column; gap: 3px; }

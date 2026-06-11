@@ -716,6 +716,21 @@ export class D1Repo implements ISignalRepo, IOpportunityRepo, ILeadRepo, IDiscov
     return result.results;
   }
 
+  async getSignalsBySource(): Promise<Array<{ source: string; total: number; avg_strength: number; analyzed: number }>> {
+    const { results } = await this.db
+      .prepare(`
+        SELECT source,
+          COUNT(*)                                            AS total,
+          COALESCE(AVG(signal_strength), 0)                  AS avg_strength,
+          COUNT(CASE WHEN friction_analysis IS NOT NULL THEN 1 END) AS analyzed
+        FROM signals
+        GROUP BY source
+        ORDER BY total DESC
+      `)
+      .all<{ source: string; total: number; avg_strength: number; analyzed: number }>();
+    return results ?? [];
+  }
+
   // ── ISignalSnapshotRepo ───────────────────────────────────────────────────
 
   async upsertSnapshot(snapshot: SignalSnapshot): Promise<void> {

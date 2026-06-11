@@ -22,6 +22,13 @@ export interface CollectorHealth {
   error:         string | null;
 }
 
+export interface SourceStat {
+  source:       string;
+  total:        number;
+  avg_strength: number;
+  analyzed:     number;
+}
+
 export type SignalSource =
   | 'gnews' | 'local_news' | 'reddit' | 'github' | 'stackoverflow'
   | 'youtube' | 'bluesky' | 'mastodon';
