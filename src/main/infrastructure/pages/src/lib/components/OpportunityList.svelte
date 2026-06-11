@@ -2,21 +2,15 @@
   import type { Opportunity } from '$lib/types.js';
   import { cleanSegment }     from '$lib/utils.js';
   import { deserialize }      from '$app/forms';
-  import DeployModal          from './DeployModal.svelte';
 
   export let opportunities: Opportunity[];
   export let onStatusChange: () => void;
 
   let openSegment: string | null = null;
-  let deploySegment: string | null = null;
   let changingStatus = false;
 
   function toggle(seg: string) {
     openSegment = openSegment === seg ? null : seg;
-  }
-
-  function scoreColor(s: number): string {
-    return s >= 6 ? 'var(--accent)' : s >= 4 ? 'var(--amber)' : 'var(--text-muted)';
   }
 
   function barWidth(val: number | undefined): string {
@@ -49,11 +43,12 @@
             <span class="name">{cleanSegment(o.segment)}</span>
             <span class="badge badge-{o.status}">{o.status}</span>
             {#if o.pain_summary}
-              <span class="pain">{o.pain_summary.slice(0, 50)}{o.pain_summary.length > 50 ? '…' : ''}</span>
+              <span class="pain">{o.pain_summary.slice(0, 60)}{o.pain_summary.length > 60 ? '…' : ''}</span>
             {/if}
           </div>
           <div class="row-right">
-            <span class="score" style="color: {scoreColor(o.score)}">{o.score.toFixed(1)}</span>
+            <span class="score">{o.score.toFixed(1)}</span>
+            <span class="signals">{o.signal_count ?? 0} señ.</span>
             <span class="chevron" class:rotated={open}>›</span>
           </div>
         </button>
@@ -84,12 +79,6 @@
             </div>
 
             <div class="actions">
-              {#if o.landing_url}
-                <a href={o.landing_url} target="_blank" class="btn-action btn-outline">Ver landing</a>
-              {/if}
-              <button class="btn-action btn-primary" on:click={() => deploySegment = o.segment}>
-                {o.landing_url ? 'Regenerar' : 'Desplegar'}
-              </button>
               <select
                 class="status-select"
                 value={o.status}
@@ -100,16 +89,13 @@
                   <option value={s}>{s}</option>
                 {/each}
               </select>
+              <span class="hint">→ Ve al Radar para desplegar</span>
             </div>
           </div>
         {/if}
       </li>
     {/each}
   </ul>
-{/if}
-
-{#if deploySegment}
-  <DeployModal segment={deploySegment} on:close={() => { deploySegment = null; onStatusChange(); }} />
 {/if}
 
 <style>
@@ -119,9 +105,10 @@
   .row:hover { background: var(--bg-input); }
   .row-left  { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
   .row-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
-  .name  { font-size: 0.85rem; font-weight: 600; color: var(--text); }
-  .pain  { font-size: 0.72rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .score { font-size: 0.9rem; font-weight: 700; }
+  .name   { font-size: 0.85rem; font-weight: 600; color: var(--text); }
+  .pain   { font-size: 0.72rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .score  { font-size: 0.9rem; font-weight: 700; color: var(--violet); }
+  .signals{ font-size: 0.68rem; color: var(--text-dim); }
   .chevron { color: var(--text-dim); font-size: 1rem; transition: transform 0.15s; display: inline-block; }
   .chevron.rotated { transform: rotate(90deg); }
   .badge { display: inline-block; padding: 1px 6px; border-radius: 9999px; font-size: 0.65rem; font-weight: 600; width: fit-content; }
@@ -135,14 +122,12 @@
   .bar-item     { display: flex; align-items: center; gap: 8px; }
   .bar-lbl      { font-size: 0.65rem; color: var(--text-muted); width: 50px; flex-shrink: 0; }
   .bar-track    { flex: 1; height: 5px; background: var(--border); border-radius: 3px; }
-  .bar-fill     { height: 100%; background: var(--accent); border-radius: 3px; }
+  .bar-fill     { height: 100%; background: var(--violet); border-radius: 3px; }
   .pain-full    { font-size: 0.78rem; color: var(--text-sub); line-height: 1.5; margin-bottom: 8px; }
   .meta-row     { margin-bottom: 10px; }
   .meta         { font-size: 0.7rem; color: var(--text-muted); }
-  .actions      { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-  .btn-action   { padding: 5px 12px; border-radius: 6px; font-size: 0.75rem; font-weight: 600; cursor: pointer; border: none; text-decoration: none; }
-  .btn-primary  { background: var(--accent); color: #fff; }
-  .btn-outline  { background: none; border: 1px solid var(--border); color: var(--text-sub); }
+  .actions      { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .status-select{ padding: 4px 8px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; color: var(--text-sub); font-size: 0.75rem; cursor: pointer; }
+  .hint         { font-size: 0.7rem; color: var(--text-dim); font-style: italic; }
   .empty { color: var(--text-muted); font-size: 0.85rem; padding: 24px 0; }
 </style>

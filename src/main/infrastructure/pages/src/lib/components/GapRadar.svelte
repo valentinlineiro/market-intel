@@ -6,87 +6,62 @@
 
   const dispatch = createEventDispatcher<{ deploy: string }>();
 
-  let filterNoLanding = false;
-  let minGap = 0;
-
-  $: filtered = entries
-    .filter(e => !filterNoLanding || !e.has_landing)
-    .filter(e => e.gap_score >= minGap);
-
-  function gapColor(score: number): string {
-    if (score >= 70) return '#22c55e';
-    if (score >= 40) return '#f59e0b';
-    return '#64748b';
-  }
+  $: sorted = [...entries].sort((a, b) => b.gap_score - a.gap_score);
 </script>
 
-<div class="radar">
-  <div class="filters">
-    <label class="toggle">
-      <input type="checkbox" bind:checked={filterNoLanding} />
-      Solo sin landing
-    </label>
-    <label class="range-label">
-      Gap mínimo: {minGap}
-      <input type="range" min="0" max="90" step="5" bind:value={minGap} />
-    </label>
+{#if sorted.length === 0}
+  <p class="empty">Sin datos de gap todavía — espera al próximo sync.</p>
+{:else}
+  <div class="list">
+    {#each sorted as entry}
+      <div class="row" class:deployed={entry.has_landing}>
+        <div class="gap-badge" class:high={entry.gap_score >= 70} class:mid={entry.gap_score >= 40 && entry.gap_score < 70}>
+          <span class="gap-score">{entry.gap_score}</span>
+          <span class="gap-label">gap</span>
+        </div>
+        <div class="body">
+          <div class="seg-name">{entry.label}</div>
+          <div class="meta">
+            dolor {entry.avg_pain.toFixed(1)} · vacío {entry.whitespace}%
+            {#if entry.has_landing}<span class="live-tag">· landing activa</span>{/if}
+          </div>
+        </div>
+        <div class="action">
+          {#if entry.has_landing}
+            <span class="deployed-tag">Desplegado ✓</span>
+          {:else}
+            <button class="btn-deploy" on:click={() => dispatch('deploy', entry.segment)}>
+              Desplegar →
+            </button>
+          {/if}
+        </div>
+      </div>
+    {/each}
   </div>
-
-  {#if filtered.length === 0}
-    <p class="empty">Sin datos de gap todavía — espera al próximo cron (cada 12h).</p>
-  {:else}
-    <table>
-      <thead>
-        <tr>
-          <th>Segmento</th>
-          <th>🔥 Dolor</th>
-          <th>🕳 Vacío</th>
-          <th>Gap</th>
-          <th>Acción</th>
-        </tr>
-      </thead>
-      <tbody>
-        {#each filtered as entry}
-          <tr>
-            <td class="seg">{entry.label}</td>
-            <td>{entry.avg_pain.toFixed(1)}</td>
-            <td>{entry.whitespace}%</td>
-            <td>
-              <span class="badge" style="color:{gapColor(entry.gap_score)}">
-                {entry.gap_score}
-              </span>
-            </td>
-            <td>
-              {#if entry.has_landing}
-                <a class="btn-sm" href="/landings/{entry.segment}" target="_blank">Ver</a>
-              {:else}
-                <button class="btn-sm btn-primary" on:click={() => dispatch('deploy', entry.segment)}>
-                  Desplegar
-                </button>
-              {/if}
-            </td>
-          </tr>
-        {/each}
-      </tbody>
-    </table>
-  {/if}
-</div>
+{/if}
 
 <style>
-  .radar        { display: flex; flex-direction: column; gap: 12px; }
-  .filters      { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
-  .toggle       { display: flex; align-items: center; gap: 6px; font-size: 0.8rem; color: var(--text-muted); cursor: pointer; }
-  .range-label  { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; color: var(--text-muted); }
-  input[type="range"] { width: 100px; accent-color: var(--accent); }
-  table         { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
-  th            { color: var(--text-muted); font-weight: 500; text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); }
-  td            { padding: 8px 10px; border-bottom: 1px solid var(--border); color: var(--text-sub); }
-  .seg          { color: var(--text); font-weight: 500; }
-  .badge        { font-weight: 700; font-size: 0.9rem; }
-  .btn-sm       { padding: 4px 12px; border-radius: 6px; font-size: 0.75rem; cursor: pointer; text-decoration: none; display: inline-block; }
-  .btn-primary  { background: var(--accent); color: white; border: none; }
-  .btn-primary:hover { background: #2563eb; }
-  a.btn-sm      { background: var(--bg-card); color: var(--text-sub); border: 1px solid var(--border); }
-  a.btn-sm:hover { background: #334155; }
-  .empty        { color: var(--text-muted); font-size: 0.85rem; padding: 32px 0; text-align: center; }
+  .list { display: flex; flex-direction: column; gap: 8px; }
+
+  .row { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--border-sub); border-radius: 9px; background: var(--bg-card); transition: border-color .12s; }
+  .row:hover:not(.deployed) { border-color: var(--border); }
+  .row.deployed { opacity: 0.45; }
+
+  .gap-badge { min-width: 48px; height: 48px; border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: var(--bg-input); flex-shrink: 0; }
+  .gap-badge.high { background: var(--violet-bg); }
+  .gap-score { font-size: 15px; font-weight: 700; color: var(--text-muted); }
+  .gap-badge.high .gap-score { color: var(--violet); }
+  .gap-label { font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--text-dim); }
+
+  .body { flex: 1; min-width: 0; }
+  .seg-name { font-weight: 600; font-size: 0.85rem; color: var(--text); }
+  .meta     { font-size: 0.72rem; color: var(--text-muted); margin-top: 3px; }
+  .live-tag { color: var(--violet); }
+
+  .action { flex-shrink: 0; }
+  .btn-deploy   { padding: 6px 13px; background: var(--violet); color: #fff; border: none; border-radius: 7px; font-size: 0.75rem; font-weight: 600; cursor: pointer; white-space: nowrap; }
+  .btn-deploy:hover { opacity: .88; }
+  .deployed-tag { font-size: 0.72rem; color: var(--text-dim); font-weight: 600; white-space: nowrap; }
+
+  .empty { color: var(--text-muted); font-size: 0.85rem; padding: 32px 0; text-align: center; }
 </style>
