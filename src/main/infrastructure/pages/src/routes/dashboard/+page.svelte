@@ -13,6 +13,7 @@
   import LeadsTable         from '$lib/components/LeadsTable.svelte';
   import ConfigForm         from '$lib/components/ConfigForm.svelte';
   import DeployModal        from '$lib/components/DeployModal.svelte';
+  import VelocityChart      from '$lib/components/VelocityChart.svelte';
 
   export let data: PageData;
 
@@ -103,6 +104,24 @@
       syncRunId   = null;
     }, 600_000);
   }
+
+  // ── Signal diversity map (segment → { sources, days }) ─────────────────────
+  $: diversityMap = (() => {
+    const acc: Record<string, { sources: Set<string>; oldest: number; newest: number }> = {};
+    for (const s of data.signals) {
+      const t = new Date(s.collected_at).getTime();
+      if (!acc[s.segment]) acc[s.segment] = { sources: new Set(), oldest: t, newest: t };
+      acc[s.segment].sources.add(s.source);
+      if (t < acc[s.segment].oldest) acc[s.segment].oldest = t;
+      if (t > acc[s.segment].newest) acc[s.segment].newest = t;
+    }
+    return Object.fromEntries(
+      Object.entries(acc).map(([seg, m]) => [seg, {
+        sources: m.sources.size,
+        days: Math.max(1, Math.round((m.newest - m.oldest) / 86_400_000)),
+      }])
+    );
+  })();
 
   // ── Pipeline stage derivation ───────────────────────────────────────────────
   $: pipelineStages = [
@@ -230,7 +249,13 @@
       {#if data.signals.length === 0}
         <div class="tab-empty">Sin señales todavía. Haz sync para recoger las primeras señales.</div>
       {:else}
-        <SignalsTable signals={data.signals} />
+        {#if data.velocity.length > 0}
+        <div class="velocity-section">
+          <div class="velocity-label">Señales por semana (todos los segmentos)</div>
+          <VelocityChart rows={data.velocity} segment={null} />
+        </div>
+      {/if}
+      <SignalsTable signals={data.signals} />
       {/if}
     {:else if activeTab === 'dolor'}
       {#if data.painProfiles.length === 0}
@@ -244,7 +269,7 @@
       {#if data.opportunities.length === 0}
         <div class="tab-empty">Sin oportunidades scored todavía. Necesitas al menos algunas señales analizadas para que aparezcan aquí.</div>
       {:else}
-        <OpportunityList opportunities={data.opportunities} onStatusChange={() => invalidateAll()} />
+        <OpportunityList opportunities={data.opportunities} {diversityMap} velocity={data.velocity} onStatusChange={() => invalidateAll()} />
       {/if}
     {:else if activeTab === 'radar'}
       <GapRadar
@@ -327,6 +352,10 @@
 
   /* Per-tab empty state */
   .tab-empty { padding: 40px 0; text-align: center; font-size: 0.82rem; color: var(--text-muted); }
+
+  /* Velocity chart header */
+  .velocity-section { margin-bottom: 16px; padding: 12px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; }
+  .velocity-label   { font-size: 0.68rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
 
   /* Config overlay */
   .config-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 200; display: flex; justify-content: flex-end; }

@@ -1,10 +1,13 @@
 <script lang="ts">
-  import type { Opportunity } from '$lib/types.js';
+  import type { Opportunity, VelocityRow } from '$lib/types.js';
   import { cleanSegment }     from '$lib/utils.js';
   import { deserialize }      from '$app/forms';
+  import VelocityChart        from './VelocityChart.svelte';
 
   export let opportunities: Opportunity[];
   export let onStatusChange: () => void;
+  export let diversityMap: Record<string, { sources: number; days: number }> = {};
+  export let velocity: VelocityRow[] = [];
 
   let openSegment: string | null = null;
   let changingStatus = false;
@@ -48,7 +51,13 @@
           </div>
           <div class="row-right">
             <span class="score">{o.score.toFixed(1)}</span>
-            <span class="signals">{o.signal_count ?? 0} señ.</span>
+            <span class="signals">
+              {o.signal_count ?? 0} señ.
+              {#if diversityMap[o.segment]}
+                · {diversityMap[o.segment].sources} src
+                · {diversityMap[o.segment].days}d
+              {/if}
+            </span>
             <span class="chevron" class:rotated={open}>›</span>
           </div>
         </button>
@@ -70,13 +79,28 @@
               </div>
             {/if}
 
-            {#if o.pain_summary}
+            {#if o.score_narrative}
+              <p class="narrative">{o.score_narrative}</p>
+            {:else if o.pain_summary}
               <p class="pain-full">{o.pain_summary}</p>
             {/if}
 
             <div class="meta-row">
               <span class="meta">{o.signal_count ?? 0} señales</span>
+              {#if diversityMap[o.segment]}
+                <span class="meta sep">·</span>
+                <span class="meta">{diversityMap[o.segment].sources} fuentes</span>
+                <span class="meta sep">·</span>
+                <span class="meta">{diversityMap[o.segment].days} días de datos</span>
+              {/if}
             </div>
+
+            {#if velocity.length > 0}
+              <div class="chart-section">
+                <div class="chart-label">Velocidad de señales (12 semanas)</div>
+                <VelocityChart rows={velocity} segment={o.segment} />
+              </div>
+            {/if}
 
             <div class="actions">
               <select
@@ -123,9 +147,13 @@
   .bar-lbl      { font-size: 0.65rem; color: var(--text-muted); width: 50px; flex-shrink: 0; }
   .bar-track    { flex: 1; height: 5px; background: var(--border); border-radius: 3px; }
   .bar-fill     { height: 100%; background: var(--violet); border-radius: 3px; }
+  .narrative    { font-size: 0.78rem; color: var(--text-sub); line-height: 1.55; margin-bottom: 8px; font-style: italic; border-left: 2px solid var(--violet); padding-left: 8px; }
   .pain-full    { font-size: 0.78rem; color: var(--text-sub); line-height: 1.5; margin-bottom: 8px; }
   .meta-row     { margin-bottom: 10px; }
   .meta         { font-size: 0.7rem; color: var(--text-muted); }
+  .sep          { margin: 0 3px; opacity: .4; }
+  .chart-section{ margin-bottom: 10px; }
+  .chart-label  { font-size: 0.65rem; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .04em; }
   .actions      { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .status-select{ padding: 4px 8px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; color: var(--text-sub); font-size: 0.75rem; cursor: pointer; }
   .hint         { font-size: 0.7rem; color: var(--text-dim); font-style: italic; }

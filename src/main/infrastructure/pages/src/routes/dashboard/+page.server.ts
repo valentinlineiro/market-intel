@@ -1,6 +1,6 @@
 import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
-import type { Stats, DiscoveryResult, Opportunity, Config, GapEntry, SignalRow, PainProfile, CronRun, CollectorHealth } from '$lib/types.js';
+import type { Stats, DiscoveryResult, Opportunity, Config, GapEntry, SignalRow, PainProfile, CronRun, CollectorHealth, VelocityRow } from '$lib/types.js';
 
 function workerFetch(url: string, env: App.Platform['env'], init?: RequestInit): Promise<Response> {
   return fetch(url, {
@@ -22,7 +22,7 @@ export const load: PageServerLoad = async ({ platform }) => {
   const env  = (platform as App.Platform).env;
   const base = env.WORKER_URL.replace(/\/$/, '');
 
-  const [statsRes, oppsRes, leadsRes, discoveryRes, configRes, pipelineRes, gapRes, signalsRes, painRes] = await Promise.all([
+  const [statsRes, oppsRes, leadsRes, discoveryRes, configRes, pipelineRes, gapRes, signalsRes, painRes, velocityRes] = await Promise.all([
     fetch(`${base}/public/stats`),
     fetch(`${base}/public/opportunities`),
     fetch(`${base}/public/leads`),
@@ -32,9 +32,10 @@ export const load: PageServerLoad = async ({ platform }) => {
     workerFetch(`${base}/gap-radar`, env),
     workerFetch(`${base}/signals?limit=200`, env),
     fetch(`${base}/public/pain-profiles`),
+    workerFetch(`${base}/stats/velocity?weeks=12`, env),
   ]);
 
-  const [statsData, oppsData, leadsData, discoveryData, configData, pipelineData, gapData, signalsData, painData] = await Promise.all([
+  const [statsData, oppsData, leadsData, discoveryData, configData, pipelineData, gapData, signalsData, painData, velocityData] = await Promise.all([
     safeJson<Stats>(statsRes, { total_signals: 0, total_opportunities: 0, analyzed_count: 0, by_segment: {}, top_opportunity: null }),
     safeJson<{ results: Opportunity[] }>(oppsRes, { results: [] }),
     safeJson<{ total: number; by_segment: Record<string, { email: string; captured_at: string; price_tier: string | null; lead_score: number }[]> }>(leadsRes, { total: 0, by_segment: {} }),
@@ -44,6 +45,7 @@ export const load: PageServerLoad = async ({ platform }) => {
     safeJson<GapEntry[]>(gapRes, []),
     safeJson<SignalRow[]>(signalsRes, []),
     safeJson<PainProfile[]>(painRes, []),
+    safeJson<{ weeks: number; rows: VelocityRow[] }>(velocityRes, { weeks: 12, rows: [] }),
   ]);
 
   return {
@@ -56,6 +58,7 @@ export const load: PageServerLoad = async ({ platform }) => {
     gapRadar:      gapData,
     signals:       signalsData,
     painProfiles:  painData,
+    velocity:      velocityData.rows,
   };
 };
 

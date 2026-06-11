@@ -87,6 +87,7 @@ function rowToOpportunity(r: Record<string, unknown>): Opportunity {
     validation_deadline: (r['validation_deadline'] as string | null) ?? null,
     telegram_alerted_at: (r['alerted_at'] as string | null) ?? null,
     gap_score:           (r['gap_score'] as number | null) ?? null,
+    score_narrative:     (r['score_narrative'] as string | null) ?? null,
   };
 }
 
@@ -231,8 +232,8 @@ export class D1Repo implements ISignalRepo, IOpportunityRepo, ILeadRepo, IDiscov
         INSERT INTO opportunities
           (id, segment, pain_summary, score, score_breakdown, signal_ids,
            signal_count, first_seen, last_updated, status, landing_url,
-           emails_captured, validation_deadline, alerted_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           emails_captured, validation_deadline, alerted_at, score_narrative)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           score=excluded.score,
           score_breakdown=excluded.score_breakdown,
@@ -243,7 +244,8 @@ export class D1Repo implements ISignalRepo, IOpportunityRepo, ILeadRepo, IDiscov
           emails_captured=excluded.emails_captured,
           landing_url=excluded.landing_url,
           validation_deadline=excluded.validation_deadline,
-          alerted_at=excluded.alerted_at
+          alerted_at=excluded.alerted_at,
+          score_narrative=COALESCE(excluded.score_narrative, score_narrative)
       `)
       .bind(
         opp.id,
@@ -264,6 +266,7 @@ export class D1Repo implements ISignalRepo, IOpportunityRepo, ILeadRepo, IDiscov
         opp.emails_captured ?? 0,
         opp.validation_deadline ?? null,
         opp.telegram_alerted_at ?? null,
+        opp.score_narrative ?? null,
       )
       .run();
   }
@@ -791,6 +794,25 @@ export class D1Repo implements ISignalRepo, IOpportunityRepo, ILeadRepo, IDiscov
       opportunity_id: r['opportunity_id'] as string | null,
       has_landing:    r['has_landing'] === 1,
     }));
+  }
+
+  // ── Signal velocity ──────────────────────────────────────────────────────────
+
+  async getSignalVelocity(weeks = 12): Promise<Array<{ week: string; segment: string; count: number }>> {
+    const { results } = await this.db
+      .prepare(`
+        SELECT
+          strftime('%Y-W%W', collected_at) AS week,
+          segment,
+          COUNT(*)                         AS count
+        FROM signals
+        WHERE collected_at >= date('now', ? || ' days')
+        GROUP BY week, segment
+        ORDER BY week ASC, count DESC
+      `)
+      .bind(-(weeks * 7))
+      .all<{ week: string; segment: string; count: number }>();
+    return results ?? [];
   }
 
   // ── ICronLogRepo ─────────────────────────────────────────────────────────────

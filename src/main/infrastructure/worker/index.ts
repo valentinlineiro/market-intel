@@ -268,6 +268,12 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
     if (path === '/stats' && method === 'GET')
       return await handleGetStats(new D1Repo(env.DB));
 
+    if (path === '/stats/velocity' && method === 'GET') {
+      const weeks = Math.min(parseInt(url.searchParams.get('weeks') ?? '12') || 12, 52);
+      const rows = await new D1Repo(env.DB).getSignalVelocity(weeks);
+      return ajson({ weeks, rows });
+    }
+
     if (path === '/config' && method === 'GET')
       return await handleGetConfig(env.DB);
 
@@ -566,6 +572,7 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
         body.top_n ?? cfg.score.top_n,
         body.min_score ?? cfg.score.min_score,
         body.dry_run ?? cfg.score.dry_run,
+        hasLlmKey(env) ? llm : undefined,
       );
       return ajson({ results });
     }
@@ -716,6 +723,7 @@ async function runCronJob(env: Env, trigger: CronRun['trigger'] = 'scheduled', e
       cfg.score.top_n,
       cfg.score.min_score,
       cfg.score.dry_run,
+      hasLlmKey(env) ? llm : undefined,
     );
     oppsUpdated = scoreResults.length;
 

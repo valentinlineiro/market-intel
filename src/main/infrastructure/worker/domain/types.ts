@@ -62,6 +62,7 @@ export interface Opportunity {
   validation_deadline: string | null;
   telegram_alerted_at: string | null;
   gap_score?: number | null;
+  score_narrative?: string | null;
 }
 
 export interface Lead {

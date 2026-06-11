@@ -9,6 +9,12 @@ export interface CronRun {
   error:            string | null;
 }
 
+export interface VelocityRow {
+  week:    string;
+  segment: string;
+  count:   number;
+}
+
 export interface CollectorHealth {
   collector_id:  string;
   last_run_at:   string;
@@ -40,6 +46,7 @@ export interface Opportunity {
   landing_url: string | null;
   emails_captured: number;
   last_updated: string;
+  score_narrative?: string | null;
 }
 
 export interface DiscoveryCandidate {
