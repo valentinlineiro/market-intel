@@ -67,6 +67,14 @@
   let syncRunning   = false;
   let syncRunId: string | null = null;
   let syncPollTimer: ReturnType<typeof setInterval> | null = null;
+  let syncMsg: { ok: boolean; text: string } | null = null;
+  let syncMsgTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function showSyncMsg(ok: boolean, text: string) {
+    if (syncMsgTimer) clearTimeout(syncMsgTimer);
+    syncMsg = { ok, text };
+    syncMsgTimer = setTimeout(() => { syncMsg = null; }, 6000);
+  }
 
   function lastRunAge(runs: PageData['pipeline']['runs']): string {
     const finished = runs.find(r => r.finished_at);
@@ -84,12 +92,19 @@
     try {
       const res  = await fetch(`/api/pipeline-status/${encodeURIComponent(syncRunId)}`);
       if (!res.ok) return;
-      const body = await res.json() as { run: { finished_at: string | null; error: string | null } | null };
+      const body = await res.json() as { run: { finished_at: string | null; error: string | null; fresh_signals: number | null; analyzed_signals: number | null } | null };
       if (body.run?.finished_at) {
         if (syncPollTimer) { clearInterval(syncPollTimer); syncPollTimer = null; }
         syncRunning = false;
         syncRunId   = null;
         await refresh();
+        if (body.run.error) {
+          showSyncMsg(false, `Error en sync: ${body.run.error.slice(0, 80)}`);
+        } else {
+          const fresh    = body.run.fresh_signals    ?? 0;
+          const analyzed = body.run.analyzed_signals ?? 0;
+          showSyncMsg(true, `Sync completado · ${fresh} señales nuevas · ${analyzed} analizadas`);
+        }
       }
     } catch { /* non-fatal */ }
   }
@@ -97,18 +112,31 @@
   async function forceSync() {
     if (syncRunning) return;
     syncRunning = true;
+    syncMsg = null;
     try {
       const res  = await fetch('/api/run-cron', { method: 'POST' });
-      const body = await res.json() as { run_id?: string };
-      syncRunId  = body.run_id ?? null;
-    } catch { /* non-fatal — cron started fire-and-forget */ }
-    // Poll every 5s; stop after 10 min
+      const body = await res.json() as { run_id?: string; error?: string };
+      if (!res.ok) {
+        syncRunning = false;
+        showSyncMsg(false, `No se pudo iniciar el sync: ${body.error ?? res.status}`);
+        return;
+      }
+      syncRunId = body.run_id ?? null;
+    } catch (e) {
+      syncRunning = false;
+      showSyncMsg(false, `Error de red: ${e instanceof Error ? e.message : String(e)}`);
+      return;
+    }
+    // Poll every 5s; give up after 10 min
     if (syncPollTimer) clearInterval(syncPollTimer);
     syncPollTimer = setInterval(pollSync, 5_000);
     setTimeout(() => {
       if (syncPollTimer) { clearInterval(syncPollTimer); syncPollTimer = null; }
-      syncRunning = false;
-      syncRunId   = null;
+      if (syncRunning) {
+        syncRunning = false;
+        syncRunId   = null;
+        showSyncMsg(false, 'Sync tardó demasiado — comprueba el pipeline');
+      }
     }, 600_000);
   }
 
@@ -183,6 +211,12 @@
       </form>
     </div>
   </header>
+
+  {#if syncMsg}
+    <div class="sync-toast" class:toast-ok={syncMsg.ok} class:toast-err={!syncMsg.ok}>
+      {syncMsg.text}
+    </div>
+  {/if}
 
   <PipelineBar
     stages={pipelineStages}
@@ -316,6 +350,11 @@
   .title   { font-size: 1.05rem; font-weight: 700; color: var(--text); }
   .subtitle{ font-size: 0.68rem; color: var(--text-muted); margin-top: 1px; }
   .header-actions { display: flex; align-items: center; gap: 8px; }
+
+  /* Sync toast */
+  .sync-toast   { padding: 7px 16px; font-size: 0.75rem; text-align: center; border-bottom: 1px solid var(--border); }
+  .toast-ok     { background: color-mix(in srgb, var(--violet) 10%, transparent); color: var(--violet); }
+  .toast-err    { background: rgba(239,68,68,.08); color: #ef4444; }
 
   /* Sync pill */
   .sync-pill { display: flex; align-items: center; gap: 5px; padding: 4px 10px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 20px; font-size: 0.72rem; color: var(--text-sub); }
