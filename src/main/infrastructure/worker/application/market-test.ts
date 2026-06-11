@@ -57,6 +57,10 @@ export class InMemorySignalRepo implements ISignalRepo {
     return this.signals.filter(s => s.collected_at >= from && s.collected_at < to);
   }
 
+  async getUnanalyzed(limit = 200): Promise<Signal[]> {
+    return this.signals.filter(s => s.friction_analysis == null).slice(0, limit);
+  }
+
   getSignals(): Signal[] {
     return [...this.signals];
   }

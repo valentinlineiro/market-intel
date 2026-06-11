@@ -9,6 +9,7 @@ export interface ISignalRepo {
   count(segment?: string): Promise<number>;
   updateFriction(id: string, strength: number, profile: FrictionProfile): Promise<void>;
   getSignalsInRange(from: string, to: string): Promise<Signal[]>;
+  getUnanalyzed(limit?: number): Promise<Signal[]>;
 }
 
 export interface IOpportunityRepo {

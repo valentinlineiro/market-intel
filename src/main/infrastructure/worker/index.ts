@@ -424,6 +424,7 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
         count: async () => 0,
         updateFriction: async (id, strength, profile) => { captured.push({ id, strength, profile }); },
         getSignalsInRange: async () => [],
+        getUnanalyzed: async () => [],
       };
 
       await analyzeFriction(signals, llm, memRepo);
@@ -598,7 +599,8 @@ async function runCronJob(env: Env): Promise<void> {
     try { await d1repo.upsertHealth(stat, runAt); } catch { /* non-fatal */ }
   }
   try {
-    await analyzeFriction(fresh, llm, d1repo);
+    const toAnalyze = await d1repo.getUnanalyzed();
+    await analyzeFriction(toAnalyze, llm, d1repo);
   } catch (e) {
     console.error('[cron] friction analysis failed (non-fatal):', e instanceof Error ? e.message : e);
   }

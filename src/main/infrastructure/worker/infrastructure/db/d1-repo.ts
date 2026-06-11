@@ -202,6 +202,16 @@ export class D1Repo implements ISignalRepo, IOpportunityRepo, ILeadRepo, IDiscov
     return (results ?? []).map(rowToSignal);
   }
 
+  async getUnanalyzed(limit = 200): Promise<Signal[]> {
+    const { results } = await this.db
+      .prepare(
+        `SELECT * FROM signals WHERE friction_analysis IS NULL ORDER BY collected_at DESC LIMIT ?`
+      )
+      .bind(limit)
+      .all<Record<string, unknown>>();
+    return (results ?? []).map(rowToSignal);
+  }
+
   // ── IOpportunityRepo ─────────────────────────────────────────────────────
 
   async upsert(opp: Opportunity): Promise<void> {
