@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { PageData } from './$types';
   import { invalidateAll } from '$app/navigation';
+  import { navigating }    from '$app/stores';
   import { theme }          from '$lib/theme.js';
   import PipelineBar        from '$lib/components/PipelineBar.svelte';
   import SignalsTable        from '$lib/components/SignalsTable.svelte';
@@ -156,7 +157,15 @@
   />
 
   <main>
-    {#if activeTab === 'senales'}
+    {#if $navigating}
+      <div class="skeleton-wrap">
+        <div class="skeleton-line wide"></div>
+        <div class="skeleton-line med"></div>
+        <div class="skeleton-line wide"></div>
+        <div class="skeleton-line narrow"></div>
+        <div class="skeleton-line med"></div>
+      </div>
+    {:else if activeTab === 'senales'}
       <SignalsTable signals={data.signals} />
     {:else if activeTab === 'dolor'}
       <FrictionList profiles={data.painProfiles} />
@@ -219,6 +228,13 @@
   .btn-sm   { padding: 5px 12px; background: var(--bg-card); color: var(--text-sub); border: 1px solid var(--border); border-radius: 6px; font-size: 0.72rem; cursor: pointer; }
 
   main { flex: 1; padding: 16px; overflow-x: hidden; }
+
+  .skeleton-wrap { display: flex; flex-direction: column; gap: 12px; padding: 8px 0; }
+  .skeleton-line  { height: 18px; border-radius: 6px; background: var(--border); animation: shimmer 1.4s ease-in-out infinite; }
+  .skeleton-line.wide   { width: 100%; }
+  .skeleton-line.med    { width: 65%; }
+  .skeleton-line.narrow { width: 40%; }
+  @keyframes shimmer { 0%,100%{opacity:.45} 50%{opacity:.9} }
 
   /* Config overlay */
   .config-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 200; display: flex; justify-content: flex-end; }

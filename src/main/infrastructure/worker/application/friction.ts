@@ -99,12 +99,12 @@ export async function analyzeFriction(
           for (const member of members) {
             await repo.updateFriction(member.id, quality, profile);
           }
-        } catch {
-          // skip individual entry on any failure
+        } catch (e) {
+          console.error('[friction] LLM parse failed for cluster:', e instanceof Error ? e.message : e);
         }
       }
-    } catch {
-      // skip entire batch on failure — original signal_strength preserved
+    } catch (e) {
+      console.error('[friction] batch LLM call failed, skipping batch:', e instanceof Error ? e.message : e);
     }
   }
 }

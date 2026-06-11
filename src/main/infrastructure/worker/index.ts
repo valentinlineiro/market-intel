@@ -65,26 +65,39 @@ export interface Env {
   YOUTUBE_API_KEY?: string;
   PRODUCTHUNT_API_KEY?: string;
   EMAIL?: SendEmail;
+  /** Allowed browser origin for authenticated routes. Defaults to Pages production URL. */
+  PAGES_ORIGIN?: string;
+  /** Set to "true" to enable /debug/* and /generate-seed routes. Off by default in production. */
+  DEBUG_ROUTES?: string;
 }
 
 // ---------------------------------------------------------------------------
 // CORS headers
 // ---------------------------------------------------------------------------
 
-const CORS = {
+const PUBLIC_CORS = {
   'Access-Control-Allow-Origin':  '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
 };
+
+function authCors(env: Env): Record<string, string> {
+  const origin = env.PAGES_ORIGIN ?? 'https://market-intel.pages.dev';
+  return {
+    'Access-Control-Allow-Origin':  origin,
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function json(body: unknown, status = 200): Response {
+function json(body: unknown, status = 200, cors: Record<string, string> = PUBLIC_CORS): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...CORS, 'Content-Type': 'application/json' },
+    headers: { ...cors, 'Content-Type': 'application/json' },
   });
 }
 
@@ -101,8 +114,11 @@ function makeLlm(llmCfg: Config['llm'], env: Env): LLMChain {
 // ---------------------------------------------------------------------------
 
 const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => {
-  if (request.method === 'OPTIONS')
-    return new Response(null, { status: 204, headers: CORS });
+  if (request.method === 'OPTIONS') {
+    const p = new URL(request.url).pathname;
+    const prefCors = p.startsWith('/public/') ? PUBLIC_CORS : authCors(env);
+    return new Response(null, { status: 204, headers: prefCors });
+  }
 
   const url    = new URL(request.url);
   const path   = url.pathname.replace(/\/$/, '');
@@ -177,11 +193,14 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
   if (!auth.startsWith('Bearer ') || auth.slice(7) !== env.WORKER_SECRET)
     return json({ error: 'unauthorized' }, 401);
 
+  const cors = authCors(env);
+  const ajson = (body: unknown, status = 200) => json(body, status, cors);
+
   try {
     if (path === '/run-cron' && method === 'POST') {
       const startedAt = new Date().toISOString();
       ctx.waitUntil(runCronJob(env));
-      return json({ ok: true, started_at: startedAt });
+      return ajson({ ok: true, started_at: startedAt });
     }
 
     if (path === '/health' && method === 'GET') {
@@ -196,8 +215,8 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
             error:         row.error,
           };
         }
-      } catch { /* return empty last_runs on D1 error */ }
-      return json({ status: 'ok', ts: new Date().toISOString(), last_runs });
+      } catch (e) { console.error('[health] failed to load collector health:', e instanceof Error ? e.message : e); }
+      return ajson({ status: 'ok', ts: new Date().toISOString(), last_runs });
     }
 
     if (path === '/signals' && method === 'GET')
@@ -221,9 +240,9 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
       const body = await request.json() as { status?: string };
       const valid = ['watching', 'testing', 'scaling', 'killed'];
       if (!body.status || !valid.includes(body.status))
-        return json({ error: 'invalid status' }, 400);
+        return ajson({ error: 'invalid status' }, 400);
       await new D1Repo(env.DB).updateOpportunityStatus(segment, body.status, new Date().toISOString());
-      return json({ ok: true });
+      return ajson({ ok: true });
     }
 
     if (path === '/stats' && method === 'GET')
@@ -235,24 +254,24 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
     if (path === '/config' && method === 'PUT') {
       const body = await request.json() as unknown;
       if (!body || typeof body !== 'object' || Array.isArray(body))
-        return json({ error: 'invalid config' }, 400);
+        return ajson({ error: 'invalid config' }, 400);
       await setConfig(env.DB, body as Record<string, unknown>);
       invalidateCache();
-      return json({ status: 'ok' });
+      return ajson({ status: 'ok' });
     }
 
     if (path === '/synthesize' && method === 'POST') {
       const { segment } = await request.json() as { segment?: string };
-      if (!segment) return json({ error: 'segment required' }, 400);
+      if (!segment) return ajson({ error: 'segment required' }, 400);
       if (!hasLlmKey(env))
-        return json({ error: 'No LLM key configured (set GROQ_API_KEY, OPENROUTER_API_KEY, NIM_API_KEY, or MISTRAL_API_KEY)' }, 503);
+        return ajson({ error: 'No LLM key configured (set GROQ_API_KEY, OPENROUTER_API_KEY, NIM_API_KEY, or MISTRAL_API_KEY)' }, 503);
       const cfg = await getConfig(env.DB);
       let segmentConfig = cfg.synthesis_segments[segment];
       if (!segmentConfig) {
         const d1repo = new D1Repo(env.DB);
         const discovery = await d1repo.getLatestCandidates();
         const candidate = discovery?.candidates.find(c => c.segment === segment);
-        if (!candidate) return json({ error: `segment '${segment}' not found` }, 404);
+        if (!candidate) return ajson({ error: `segment '${segment}' not found` }, 404);
         segmentConfig = {
           key:             segment,
           label:           candidate.label ?? segment.replace(/_/g, ' '),
@@ -265,7 +284,7 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
       const llm = makeLlm(cfg.llm, env);
       const copy = await synthesizeCopy(segment, segmentConfig, llm);
       const html = buildHtml(segment, copy);
-      return json({ segment, copy, html });
+      return ajson({ segment, copy, html });
     }
 
     if (path === '/deploy' && method === 'POST') {
@@ -276,10 +295,10 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
         copy?: { headline?: string; subheadline?: string; pain_points?: string[]; cta?: string };
       };
       const { segment, page_slug = 'index' } = body;
-      if (!segment) return json({ error: 'segment required' }, 400);
+      if (!segment) return ajson({ error: 'segment required' }, 400);
       const copy = body.copy ?? null;
       const html = body.html ?? (copy ? buildHtml(segment, copy as Parameters<typeof buildHtml>[1]) : null);
-      if (!html) return json({ error: 'html or copy required' }, 400);
+      if (!html) return ajson({ error: 'html or copy required' }, 400);
       const now   = new Date().toISOString();
       const title = copy?.headline ?? segment;
       const d1repo = new D1Repo(env.DB);
@@ -288,7 +307,7 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
         ? `https://market-intel.pages.dev/landings/${segment}`
         : `https://market-intel.pages.dev/landings/${segment}/${page_slug}`;
       await d1repo.updateOpportunityLanding(segment, landingUrl, 'testing', now);
-      return json({ url: landingUrl });
+      return ajson({ url: landingUrl });
     }
 
     if (path === '/render' && method === 'POST') {
@@ -296,8 +315,8 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
         segment?: string;
         copy?: Parameters<typeof buildHtml>[1];
       };
-      if (!segment || !copy) return json({ error: 'segment and copy required' }, 400);
-      return json({ html: buildHtml(segment, copy) });
+      if (!segment || !copy) return ajson({ error: 'segment and copy required' }, 400);
+      return ajson({ html: buildHtml(segment, copy) });
     }
 
     const pagesMatch = path.match(/^\/pages\/([^/]+)$/);
@@ -305,7 +324,7 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
       const segment = decodeURIComponent(pagesMatch[1]);
       const d1repo = new D1Repo(env.DB);
       const pages = await d1repo.listLandingPages(segment);
-      return json({ pages });
+      return ajson({ pages });
     }
 
     const pageDeleteMatch = path.match(/^\/pages\/([^/]+)\/([^/]+)$/);
@@ -314,13 +333,13 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
       const pageSlug = decodeURIComponent(pageDeleteMatch[2]);
       const d1repo = new D1Repo(env.DB);
       await d1repo.deleteLandingPage(segment, pageSlug);
-      return json({ ok: true });
+      return ajson({ ok: true });
     }
 
     if (method === 'GET' && path === '/gap-radar') {
       const d1repo = new D1Repo(env.DB);
       const rows = await d1repo.getGapRadar(50);
-      return json(rows.map(r => ({
+      return ajson(rows.map(r => ({
         segment:        r.segment,
         label:          r.segment.replace(/_/g, ' '),
         avg_pain:       Math.round(r.avg_pain * 10) / 10,
@@ -347,13 +366,13 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
         }>;
       };
       if (!run_id || !Array.isArray(candidates) || !candidates.length)
-        return json({ error: 'run_id and non-empty candidates required' }, 400);
+        return ajson({ error: 'run_id and non-empty candidates required' }, 400);
       const invalid = candidates.filter(c => !c.profile || !c.pain);
       if (invalid.length)
-        return json({ error: `${invalid.length} candidate(s) missing required profile/pain fields` }, 400);
+        return ajson({ error: `${invalid.length} candidate(s) missing required profile/pain fields` }, 400);
       const d1repo = new D1Repo(env.DB);
       await d1repo.replaceCandidatesWithRunId(run_id, candidates);
-      return json({ saved: candidates.length });
+      return ajson({ saved: candidates.length });
     }
 
     if (path === '/collect/github-debug' && method === 'GET') {
@@ -378,8 +397,11 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
         ss: s.signal_strength ?? 0, kw: s.pain_keywords, sent: s.sentiment_score,
         url: s.url, excerpt: s.raw_text.slice(0, 100),
       }));
-      return json({ signal_count: signals.length, ss_mean: avg, ss_distribution: buckets, top });
+      return ajson({ signal_count: signals.length, ss_mean: avg, ss_distribution: buckets, top });
     }
+
+    if (env.DEBUG_ROUTES !== 'true' && (path.startsWith('/debug/') || path === '/generate-seed'))
+      return ajson({ error: 'not found' }, 404);
 
     if (path === '/debug/collect-all' && method === 'GET') {
       const testCfg: Config = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
@@ -404,7 +426,7 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
           results.push({ id: c.id, signals: 0, error: e instanceof Error ? e.message.slice(0, 120) : String(e) });
         }
       }
-      return json(results);
+      return ajson(results);
     }
 
     if (path === '/debug/friction' && method === 'GET') {
@@ -459,7 +481,7 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
         else afterBuckets['0.8-1.0']++;
       }
       const afterMean = afterAll.length ? (afterAll.reduce((a, b) => a + b, 0) / afterAll.length) : 0;
-      return json({
+      return ajson({
         total_signals: signals.length,
         enriched_count: enriched.length,
         batch_count: Math.ceil(signals.length / 10),
@@ -472,7 +494,7 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
 
     if (path === '/discover' && method === 'POST') {
       if (!hasLlmKey(env))
-        return json({ error: 'LLM key not configured' }, 503);
+        return ajson({ error: 'LLM key not configured' }, 503);
 
       try {
         const cfg = await getConfig(env.DB);
@@ -487,15 +509,15 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
 
         const candidates = await runDiscovery(llm, notifier, discoverCfg, texts, knownSegments);
 
-        if (!candidates.length) return json({ run_id: null, candidates: [], message: 'No new segments found' });
+        if (!candidates.length) return ajson({ run_id: null, candidates: [], message: 'No new segments found' });
 
         const run_id = crypto.randomUUID();
         await d1repo.saveCandidates(candidates, run_id);
-        return json({ run_id, candidates });
+        return ajson({ run_id, candidates });
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error('discover failed:', msg);
-        return json({ error: msg }, 500);
+        return ajson({ error: msg }, 500);
       }
     }
 
@@ -525,15 +547,15 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
         body.min_score ?? cfg.score.min_score,
         body.dry_run ?? cfg.score.dry_run,
       );
-      return json({ results });
+      return ajson({ results });
     }
 
     if (path === '/market-test' && method === 'POST') {
       const { description } = await request.json() as { description?: string };
       if (!description || typeof description !== 'string' || !description.trim())
-        return json({ error: 'description required' }, 400);
+        return ajson({ error: 'description required' }, 400);
       if (!hasLlmKey(env))
-        return json({ error: 'No LLM key configured (set GROQ_API_KEY, OPENROUTER_API_KEY, NIM_API_KEY, or MISTRAL_API_KEY)' }, 503);
+        return ajson({ error: 'No LLM key configured (set GROQ_API_KEY, OPENROUTER_API_KEY, NIM_API_KEY, or MISTRAL_API_KEY)' }, 503);
       const id   = crypto.randomUUID().slice(0, 12);
       const now  = new Date().toISOString();
       const d1repo = new D1Repo(env.DB);
@@ -543,22 +565,22 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
       ctx.waitUntil(runMarketTest(id, description.trim(), llm, d1repo,
         (config) => collectGnews({ 'market-test': config }, ''),
       ));
-      return json({ test_id: id });
+      return ajson({ test_id: id });
     }
 
     if (path.startsWith('/market-test/') && method === 'GET') {
       const id = path.slice('/market-test/'.length);
       const d1repo = new D1Repo(env.DB);
       const test = await d1repo.getMarketTest(id);
-      if (!test) return json({ error: 'not found' }, 404);
-      return json(test);
+      if (!test) return ajson({ error: 'not found' }, 404);
+      return ajson(test);
     }
 
     if (path === '/generate-seed' && method === 'POST') {
       if (!hasLlmKey(env))
-        return json({ error: 'LLM key not configured' }, 503);
+        return ajson({ error: 'LLM key not configured' }, 503);
       const { description } = await request.json() as { description?: string };
-      if (!description?.trim()) return json({ error: 'description required' }, 400);
+      if (!description?.trim()) return ajson({ error: 'description required' }, 400);
       const cfg = await getConfig(env.DB);
       const llm = makeLlm(cfg.llm, env);
       const seed = await generateSeedConfig(description, llm);
@@ -573,15 +595,15 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
         } as unknown as Config['collectors'],
       });
       invalidateCache();
-      return json({ ok: true, segments: seed.segments });
+      return ajson({ ok: true, segments: seed.segments });
     }
 
-    return json({ error: 'not found' }, 404);
+    return ajson({ error: 'not found' }, 404);
 
   } catch (err) {
     console.error(path, err);
     const msg = err instanceof Error ? err.message : String(err);
-    return json({ error: msg }, 500);
+    return ajson({ error: msg }, 500);
   }
 };
 
@@ -607,7 +629,7 @@ async function runCronJob(env: Env): Promise<void> {
   const { signals: fresh, stats } = await runCollect(d1repo, collectors);
   const runAt = new Date().toISOString();
   for (const stat of stats) {
-    try { await d1repo.upsertHealth(stat, runAt); } catch { /* non-fatal */ }
+    try { await d1repo.upsertHealth(stat, runAt); } catch (e) { console.error(`[cron] upsertHealth failed for ${stat.id}:`, e instanceof Error ? e.message : e); }
   }
   try {
     const toAnalyze = await d1repo.getUnanalyzed();
