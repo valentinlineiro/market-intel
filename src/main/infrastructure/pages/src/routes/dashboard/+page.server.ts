@@ -18,21 +18,29 @@ async function safeJson<T>(res: Response, fallback: T): Promise<T> {
   try { return await res.json() as T; } catch { return fallback; }
 }
 
+async function safeFetch(input: Promise<Response>, fallback: Response): Promise<Response> {
+  try { return await input; } catch { return fallback; }
+}
+
+function failedResponse(): Response {
+  return new Response('{}', { status: 503 });
+}
+
 export const load: PageServerLoad = async ({ platform }) => {
   const env  = (platform as App.Platform).env;
   const base = env.WORKER_URL.replace(/\/$/, '');
 
   const [statsRes, oppsRes, leadsRes, discoveryRes, configRes, pipelineRes, gapRes, signalsRes, painRes, velocityRes] = await Promise.all([
-    fetch(`${base}/public/stats`),
-    fetch(`${base}/public/opportunities`),
-    fetch(`${base}/public/leads`),
-    fetch(`${base}/public/discovery`),
-    fetch(`${base}/public/config`),
-    workerFetch(`${base}/pipeline-status`, env),
-    workerFetch(`${base}/gap-radar`, env),
-    workerFetch(`${base}/signals?limit=200`, env),
-    fetch(`${base}/public/pain-profiles`),
-    workerFetch(`${base}/stats/velocity?weeks=12`, env),
+    safeFetch(fetch(`${base}/public/stats`), failedResponse()),
+    safeFetch(fetch(`${base}/public/opportunities`), failedResponse()),
+    safeFetch(fetch(`${base}/public/leads`), failedResponse()),
+    safeFetch(fetch(`${base}/public/discovery`), failedResponse()),
+    safeFetch(fetch(`${base}/public/config`), failedResponse()),
+    safeFetch(workerFetch(`${base}/pipeline-status`, env), failedResponse()),
+    safeFetch(workerFetch(`${base}/gap-radar`, env), failedResponse()),
+    safeFetch(workerFetch(`${base}/signals?limit=200`, env), failedResponse()),
+    safeFetch(fetch(`${base}/public/pain-profiles`), failedResponse()),
+    safeFetch(workerFetch(`${base}/stats/velocity?weeks=12`, env), failedResponse()),
   ]);
 
   const [statsData, oppsData, leadsData, discoveryData, configData, pipelineData, gapData, signalsData, painData, velocityData] = await Promise.all([
