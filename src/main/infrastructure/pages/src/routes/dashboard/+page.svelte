@@ -2,6 +2,13 @@
   import type { PageData } from './$types';
   import { invalidateAll } from '$app/navigation';
   import { navigating }    from '$app/stores';
+
+  let refreshing = false;
+  async function refresh() {
+    refreshing = true;
+    await invalidateAll();
+    refreshing = false;
+  }
   import { theme }         from '$lib/theme.js';
   import PipelineBar       from '$lib/components/PipelineBar.svelte';
   import PipelineDrawer    from '$lib/components/PipelineDrawer.svelte';
@@ -48,7 +55,7 @@
       seedResult = d.success
         ? { ok: true,  message: `${d.count} segmentos generados. Haz sync para iniciar la recolección.` }
         : { ok: false, message: d.error ?? 'Error desconocido' };
-      if (d.success) await invalidateAll();
+      if (d.success) await refresh();
     } catch (e) {
       seedResult = { ok: false, message: String(e) };
     } finally {
@@ -82,7 +89,7 @@
         if (syncPollTimer) { clearInterval(syncPollTimer); syncPollTimer = null; }
         syncRunning = false;
         syncRunId   = null;
-        await invalidateAll();
+        await refresh();
       }
     } catch { /* non-fatal */ }
   }
@@ -210,7 +217,7 @@
   {/if}
 
   <main>
-    {#if $navigating}
+    {#if $navigating || refreshing}
       <div class="skeleton-wrap">
         <div class="skeleton-line wide"></div>
         <div class="skeleton-line med"></div>
@@ -220,7 +227,7 @@
       </div>
     {/if}
 
-    {#if !$navigating && data.stats.total_signals === 0 && data.pipeline.runs.length === 0}
+    {#if !$navigating && !refreshing && data.stats.total_signals === 0 && data.pipeline.runs.length === 0}
       <!-- Empty state: no data, never run -->
       <div class="empty-state">
         <div class="empty-icon">🌱</div>
@@ -247,7 +254,7 @@
           {/if}
         </form>
       </div>
-    {:else if !$navigating && activeTab === 'senales'}
+    {:else if !$navigating && !refreshing && activeTab === 'senales'}
       {#if data.signals.length === 0}
         <div class="tab-empty">Sin señales todavía. Haz sync para recoger las primeras señales.</div>
       {:else}
@@ -259,15 +266,15 @@
         {/if}
         <SignalsTable signals={data.signals} />
       {/if}
-    {:else if !$navigating && activeTab === 'dolor'}
+    {:else if !$navigating && !refreshing && activeTab === 'dolor'}
       {#if data.painProfiles.length === 0}
         <div class="tab-empty">Sin perfiles de dolor. El análisis de fricción se ejecuta automáticamente en el próximo sync.</div>
       {:else}
         <FrictionList profiles={data.painProfiles} />
       {/if}
-    {:else if !$navigating && activeTab === 'segmentos'}
+    {:else if !$navigating && !refreshing && activeTab === 'segmentos'}
       <SectorsGrid discovery={data.discovery} />
-    {:else if !$navigating}
+    {:else if !$navigating && !refreshing}
       {#if activeTab === 'radar'}
         <GapRadar
           entries={data.gapRadar}
@@ -280,7 +287,7 @@
         {#if data.opportunities.length === 0}
           <div class="tab-empty">Sin oportunidades scored todavía. Necesitas al menos algunas señales analizadas para que aparezcan aquí.</div>
         {:else}
-          <OpportunityList opportunities={data.opportunities} {diversityMap} velocity={data.velocity} onStatusChange={() => invalidateAll()} />
+          <OpportunityList opportunities={data.opportunities} {diversityMap} velocity={data.velocity} onStatusChange={() => refresh()} />
         {/if}
       {/if}
     {/if}
@@ -290,7 +297,7 @@
 {#if showDeploy && deploySegment}
   <DeployModal
     segment={deploySegment}
-    on:close={() => { showDeploy = false; deploySegment = ''; invalidateAll(); }}
+    on:close={() => { showDeploy = false; deploySegment = ''; refresh(); }}
   />
 {/if}
 
@@ -302,7 +309,7 @@
         <button class="btn-icon" on:click={() => showConfig = false}>✕</button>
       </div>
       <div class="config-body">
-        <ConfigForm config={data.config} onSave={() => { showConfig = false; invalidateAll(); }} />
+        <ConfigForm config={data.config} onSave={() => { showConfig = false; refresh(); }} />
       </div>
     </div>
   </div>
