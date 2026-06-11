@@ -25,7 +25,7 @@
   export let data: PageData;
 
   type Tab = 'senales' | 'dolor' | 'segmentos' | 'oportunidades' | 'radar' | 'leads';
-  let activeTab: Tab = 'oportunidades';
+  let activeTab: Tab = 'senales';
 
   // Config overlay
   let showConfig = false;
@@ -254,18 +254,6 @@
           {/if}
         </form>
       </div>
-    {:else if !$navigating && !refreshing && activeTab === 'senales'}
-      {#if data.signals.length === 0}
-        <div class="tab-empty">Sin señales todavía. Haz sync para recoger las primeras señales.</div>
-      {:else}
-        {#if data.velocity.length > 0}
-          <div class="velocity-section">
-            <div class="velocity-label">Señales por semana (todos los segmentos)</div>
-            <VelocityChart rows={data.velocity} segment={null} />
-          </div>
-        {/if}
-        <SignalsTable signals={data.signals} />
-      {/if}
     {:else if !$navigating && !refreshing && activeTab === 'dolor'}
       {#if data.painProfiles.length === 0}
         <div class="tab-empty">Sin perfiles de dolor. El análisis de fricción se ejecuta automáticamente en el próximo sync.</div>
@@ -275,7 +263,13 @@
     {:else if !$navigating && !refreshing && activeTab === 'segmentos'}
       <SectorsGrid discovery={data.discovery} />
     {:else if !$navigating && !refreshing}
-      {#if activeTab === 'radar'}
+      {#if activeTab === 'oportunidades'}
+        {#if data.opportunities.length === 0}
+          <div class="tab-empty">Sin oportunidades scored todavía. Necesitas al menos algunas señales analizadas para que aparezcan aquí.</div>
+        {:else}
+          <OpportunityList opportunities={data.opportunities} {diversityMap} velocity={data.velocity} onStatusChange={() => refresh()} />
+        {/if}
+      {:else if activeTab === 'radar'}
         <GapRadar
           entries={data.gapRadar}
           on:deploy={e => { deploySegment = e.detail; showDeploy = true; }}
@@ -283,11 +277,17 @@
       {:else if activeTab === 'leads'}
         <LeadsTable bySegment={data.leads.by_segment} total={data.leads.total} />
       {:else}
-        <!-- oportunidades (default) -->
-        {#if data.opportunities.length === 0}
-          <div class="tab-empty">Sin oportunidades scored todavía. Necesitas al menos algunas señales analizadas para que aparezcan aquí.</div>
+        <!-- señales (default fallback) -->
+        {#if data.signals.length === 0}
+          <div class="tab-empty">Sin señales todavía. Haz sync para recoger las primeras señales.</div>
         {:else}
-          <OpportunityList opportunities={data.opportunities} {diversityMap} velocity={data.velocity} onStatusChange={() => refresh()} />
+          {#if data.velocity.length > 0}
+            <div class="velocity-section">
+              <div class="velocity-label">Señales por semana (todos los segmentos)</div>
+              <VelocityChart rows={data.velocity} segment={null} />
+            </div>
+          {/if}
+          <SignalsTable signals={data.signals} />
         {/if}
       {/if}
     {/if}
