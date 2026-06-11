@@ -43,6 +43,7 @@ export interface Lead {
 export interface Stats {
   total_signals: number;
   total_opportunities: number;
+  analyzed_count: number;
   by_segment: Record<string, number>;
   top_opportunity: { score: number; pain_summary: string } | null;
 }
@@ -74,8 +75,26 @@ export interface GapEntry {
   segment:        string;
   label:          string;
   avg_pain:       number;
-  whitespace:     number;   // 0–100 (%)
-  gap_score:      number;   // 0–100
+  whitespace:     number;
+  gap_score:      number;
   has_landing:    boolean;
   opportunity_id: string | null;
+}
+
+export interface SignalRow {
+  id: string;
+  segment: string;
+  source: string;
+  raw_text: string;
+  collected_at: string;
+  signal_strength: number | null;
+}
+
+export interface PainProfile {
+  segment: string;
+  problem_type: string;
+  intensity: number;
+  pain_summary: string;
+  confidence: number;
+  count: number;
 }
