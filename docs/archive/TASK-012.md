@@ -1,5 +1,8 @@
 ## TASK-012: capture restructure dashboard to 4-stage pipeline: Info, Dol
-**Meta:** P3 | S | READY | Focus:no | 2-code-generation | local | docs/tasks/
+**Meta:** P3 | S | DONE | Focus:no | 2-code-generation | local | docs/tasks/
+**Closed-at:** 2026-06-11T14:23:20.846Z
+**Actor:** unknown
+**Created-at:** 2026-06-11T14:21:33.897Z
 **Depends:** none
 
 ### Acceptance Criteria
