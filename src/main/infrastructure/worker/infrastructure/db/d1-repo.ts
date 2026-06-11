@@ -605,10 +605,10 @@ export class D1Repo implements ISignalRepo, IOpportunityRepo, ILeadRepo, IDiscov
       `)
       .all<Record<string, unknown>>();
     return (results ?? []).map(r => ({
-      segment:      r['segment']      as string,
-      problem_type: r['problem_type'] as string ?? 'unknown',
+      segment:      (r['segment']      as string | null) ?? '',
+      problem_type: (r['problem_type'] as string | null) ?? 'unknown',
       intensity:    Number(r['intensity'])   || 0,
-      pain_summary: r['pain_summary'] as string ?? '',
+      pain_summary: (r['pain_summary'] as string | null) ?? '',
       confidence:   Number(r['confidence'])  || 0,
       count:        Number(r['count'])       || 0,
     }));
