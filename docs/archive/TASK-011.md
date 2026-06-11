@@ -1,5 +1,8 @@
 ## TASK-011: capture server-side pagination and filtering for signals tab
-**Meta:** P3 | S | READY | Focus:no | 2-code-generation | local | docs/tasks/
+**Meta:** P3 | S | DONE | Focus:no | 2-code-generation | local | docs/tasks/
+**Closed-at:** 2026-06-11T13:58:30.487Z
+**Actor:** unknown
+**Created-at:** 2026-06-11T13:53:17.426Z
 **Depends:** none
 
 ### Acceptance Criteria
