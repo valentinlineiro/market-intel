@@ -12,6 +12,7 @@ import type {
   FrictionProfile,
   CollectorStat,
   SignalSnapshot,
+  CronRun,
 } from '../../domain/types.js';
 import type {
   ISignalRepo,
@@ -21,6 +22,7 @@ import type {
   IMarketTestRepo,
   ICollectorHealthRepo,
   ISignalSnapshotRepo,
+  ICronLogRepo,
 } from '../../application/ports.js';
 
 // ---------------------------------------------------------------------------
@@ -115,7 +117,7 @@ function rowToLead(r: Record<string, unknown>): Lead {
 // TypeScript does not allow two methods with the same name but different signatures
 // when implementing multiple interfaces.  We satisfy both ISignalRepo.getAll(limit)
 // and IOpportunityRepo.getAll() via overloads.
-export class D1Repo implements ISignalRepo, IOpportunityRepo, ILeadRepo, IDiscoveryRepo, IMarketTestRepo, ICollectorHealthRepo, ISignalSnapshotRepo {
+export class D1Repo implements ISignalRepo, IOpportunityRepo, ILeadRepo, IDiscoveryRepo, IMarketTestRepo, ICollectorHealthRepo, ISignalSnapshotRepo, ICronLogRepo {
   constructor(private readonly db: D1Database) {}
 
   // ── ISignalRepo ──────────────────────────────────────────────────────────
@@ -788,6 +790,43 @@ export class D1Repo implements ISignalRepo, IOpportunityRepo, ILeadRepo, IDiscov
       gap_score:      r['gap_score'] as number | null,
       opportunity_id: r['opportunity_id'] as string | null,
       has_landing:    r['has_landing'] === 1,
+    }));
+  }
+
+  // ── ICronLogRepo ─────────────────────────────────────────────────────────────
+
+  async insertCronRun(run: CronRun): Promise<void> {
+    await this.db
+      .prepare(
+        'INSERT INTO cron_log (id, started_at, trigger) VALUES (?, ?, ?)'
+      )
+      .bind(run.id, run.started_at, run.trigger)
+      .run();
+  }
+
+  async finishCronRun(id: string, fields: { fresh_signals: number; analyzed_signals: number; opps_updated: number; error?: string }): Promise<void> {
+    await this.db
+      .prepare(
+        'UPDATE cron_log SET finished_at = ?, fresh_signals = ?, analyzed_signals = ?, opps_updated = ?, error = ? WHERE id = ?'
+      )
+      .bind(new Date().toISOString(), fields.fresh_signals, fields.analyzed_signals, fields.opps_updated, fields.error ?? null, id)
+      .run();
+  }
+
+  async getRecentCronRuns(limit = 5): Promise<CronRun[]> {
+    const { results } = await this.db
+      .prepare('SELECT * FROM cron_log ORDER BY started_at DESC LIMIT ?')
+      .bind(limit)
+      .all<Record<string, unknown>>();
+    return (results ?? []).map(r => ({
+      id:               r['id'] as string,
+      started_at:       r['started_at'] as string,
+      finished_at:      (r['finished_at'] as string | null) ?? null,
+      trigger:          (r['trigger'] as 'scheduled' | 'manual') ?? 'scheduled',
+      fresh_signals:    (r['fresh_signals'] as number | null) ?? null,
+      analyzed_signals: (r['analyzed_signals'] as number | null) ?? null,
+      opps_updated:     (r['opps_updated'] as number | null) ?? null,
+      error:            (r['error'] as string | null) ?? null,
     }));
   }
 }

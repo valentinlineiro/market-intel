@@ -1,3 +1,21 @@
+export interface CronRun {
+  id:               string;
+  started_at:       string;
+  finished_at:      string | null;
+  trigger:          'scheduled' | 'manual';
+  fresh_signals:    number | null;
+  analyzed_signals: number | null;
+  opps_updated:     number | null;
+  error:            string | null;
+}
+
+export interface CollectorHealth {
+  collector_id:  string;
+  last_run_at:   string;
+  signal_count:  number;
+  error:         string | null;
+}
+
 export type SignalSource =
   | 'gnews' | 'local_news' | 'reddit' | 'github' | 'stackoverflow'
   | 'youtube' | 'bluesky' | 'mastodon';

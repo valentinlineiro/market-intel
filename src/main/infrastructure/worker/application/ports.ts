@@ -69,3 +69,9 @@ export interface ICollectorHealthRepo {
     error:         string | null;
   }>>;
 }
+
+export interface ICronLogRepo {
+  insertCronRun(run: import('../domain/types.js').CronRun): Promise<void>;
+  finishCronRun(id: string, fields: { fresh_signals: number; analyzed_signals: number; opps_updated: number; error?: string }): Promise<void>;
+  getRecentCronRuns(limit?: number): Promise<import('../domain/types.js').CronRun[]>;
+}

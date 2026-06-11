@@ -8,6 +8,17 @@ export interface CollectorStat {
   error?: string;
 }
 
+export interface CronRun {
+  id:               string;
+  started_at:       string;
+  finished_at:      string | null;
+  trigger:          'scheduled' | 'manual';
+  fresh_signals:    number | null;
+  analyzed_signals: number | null;
+  opps_updated:     number | null;
+  error:            string | null;
+}
+
 export type OpportunityStatus = 'watching' | 'testing' | 'scaling' | 'killed';
 
 export interface ScoreBreakdown {

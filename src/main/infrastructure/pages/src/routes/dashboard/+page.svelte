@@ -2,16 +2,17 @@
   import type { PageData } from './$types';
   import { invalidateAll } from '$app/navigation';
   import { navigating }    from '$app/stores';
-  import { theme }          from '$lib/theme.js';
-  import PipelineBar        from '$lib/components/PipelineBar.svelte';
-  import SignalsTable        from '$lib/components/SignalsTable.svelte';
-  import FrictionList        from '$lib/components/FrictionList.svelte';
-  import SectorsGrid         from '$lib/components/SectorsGrid.svelte';
-  import OpportunityList     from '$lib/components/OpportunityList.svelte';
-  import GapRadar            from '$lib/components/GapRadar.svelte';
-  import LeadsTable          from '$lib/components/LeadsTable.svelte';
-  import ConfigForm          from '$lib/components/ConfigForm.svelte';
-  import DeployModal         from '$lib/components/DeployModal.svelte';
+  import { theme }         from '$lib/theme.js';
+  import PipelineBar       from '$lib/components/PipelineBar.svelte';
+  import PipelineDrawer    from '$lib/components/PipelineDrawer.svelte';
+  import SignalsTable       from '$lib/components/SignalsTable.svelte';
+  import FrictionList       from '$lib/components/FrictionList.svelte';
+  import SectorsGrid        from '$lib/components/SectorsGrid.svelte';
+  import OpportunityList    from '$lib/components/OpportunityList.svelte';
+  import GapRadar           from '$lib/components/GapRadar.svelte';
+  import LeadsTable         from '$lib/components/LeadsTable.svelte';
+  import ConfigForm         from '$lib/components/ConfigForm.svelte';
+  import DeployModal        from '$lib/components/DeployModal.svelte';
 
   export let data: PageData;
 
@@ -21,40 +22,65 @@
   // Config overlay
   let showConfig = false;
 
+  // Pipeline drawer
+  let showPipeline = false;
+
   // Deploy modal (triggered from GapRadar)
   let deploySegment = '';
   let showDeploy    = false;
 
-  // ── Sync status ─────────────────────────────────────────────────────────────
-  let syncRunning   = false;
-  let syncPollTimer: ReturnType<typeof setInterval> | null = null;
-  let lastRunSnapshot: Record<string, string> = {};  // collector_id → last_run_at
+  // Seed form
+  let seedDesc     = '';
+  let seedLoading  = false;
+  let seedResult: { ok: boolean; message: string } | null = null;
 
-  function syncAgeLabel(health: PageData['health']): string {
-    const runs = Object.values(health.last_runs ?? {});
-    if (!runs.length) return 'nunca';
-    const latest = runs.reduce((max, r) => r.last_run_at > max ? r.last_run_at : max, '');
-    if (!latest) return 'nunca';
-    const mins = Math.round((Date.now() - new Date(latest).getTime()) / 60_000);
-    if (mins < 2)   return 'hace un momento';
-    if (mins < 60)  return `hace ${mins} min`;
-    const hrs = Math.round(mins / 60);
-    return `hace ${hrs}h`;
+  async function submitSeed() {
+    if (!seedDesc.trim() || seedLoading) return;
+    seedLoading = true;
+    seedResult  = null;
+    try {
+      const fd = new FormData();
+      fd.set('description', seedDesc.trim());
+      const res = await fetch('?/generateSeed', { method: 'POST', body: fd });
+      const json = await res.json() as { type: string; data: { success: boolean; count?: number; error?: string } };
+      const d = json.data;
+      seedResult = d.success
+        ? { ok: true,  message: `${d.count} segmentos generados. Haz sync para iniciar la recolección.` }
+        : { ok: false, message: d.error ?? 'Error desconocido' };
+      if (d.success) await invalidateAll();
+    } catch (e) {
+      seedResult = { ok: false, message: String(e) };
+    } finally {
+      seedLoading = false;
+    }
   }
 
-  $: syncAge = syncAgeLabel(data.health);
+  // ── Sync status ─────────────────────────────────────────────────────────────
+  let syncRunning   = false;
+  let syncRunId: string | null = null;
+  let syncPollTimer: ReturnType<typeof setInterval> | null = null;
+
+  function lastRunAge(runs: PageData['pipeline']['runs']): string {
+    const finished = runs.find(r => r.finished_at);
+    if (!finished?.finished_at) return 'nunca';
+    const mins = Math.round((Date.now() - new Date(finished.finished_at).getTime()) / 60_000);
+    if (mins < 2)  return 'hace un momento';
+    if (mins < 60) return `hace ${mins} min`;
+    return `hace ${Math.round(mins / 60)}h`;
+  }
+
+  $: syncAge = lastRunAge(data.pipeline.runs);
 
   async function pollSync() {
+    if (!syncRunId) return;
     try {
-      const res  = await fetch('/api/health');
+      const res  = await fetch(`/api/pipeline-status/${encodeURIComponent(syncRunId)}`);
       if (!res.ok) return;
-      const body = await res.json() as { last_runs: Record<string, { last_run_at: string }> };
-      const changed = Object.entries(body.last_runs ?? {}).some(
-        ([id, r]) => lastRunSnapshot[id] !== r.last_run_at
-      );
-      if (changed) {
+      const body = await res.json() as { run: { finished_at: string | null; error: string | null } | null };
+      if (body.run?.finished_at) {
         if (syncPollTimer) { clearInterval(syncPollTimer); syncPollTimer = null; }
         syncRunning = false;
+        syncRunId   = null;
         await invalidateAll();
       }
     } catch { /* non-fatal */ }
@@ -63,12 +89,10 @@
   async function forceSync() {
     if (syncRunning) return;
     syncRunning = true;
-    // Snapshot current last_run_at values so we can detect change
-    lastRunSnapshot = Object.fromEntries(
-      Object.entries(data.health.last_runs ?? {}).map(([id, r]) => [id, r.last_run_at])
-    );
     try {
-      await fetch('/api/run-cron', { method: 'POST' });
+      const res  = await fetch('/api/run-cron', { method: 'POST' });
+      const body = await res.json() as { run_id?: string };
+      syncRunId  = body.run_id ?? null;
     } catch { /* non-fatal — cron started fire-and-forget */ }
     // Poll every 5s; stop after 10 min
     if (syncPollTimer) clearInterval(syncPollTimer);
@@ -76,6 +100,7 @@
     setTimeout(() => {
       if (syncPollTimer) { clearInterval(syncPollTimer); syncPollTimer = null; }
       syncRunning = false;
+      syncRunId   = null;
     }, 600_000);
   }
 
@@ -139,6 +164,7 @@
         <span class="sync-dot" class:running={syncRunning}></span>
         {#if syncRunning}en curso{:else}{syncAge}{/if}
         <button class="sync-btn" on:click={forceSync} disabled={syncRunning} title="Forzar sync">↻</button>
+        <button class="sync-btn" on:click={() => showPipeline = !showPipeline} title="Estado del pipeline">≡</button>
       </div>
       <button class="btn-icon" on:click={() => showConfig = true} title="Configuración">⚙</button>
       <button class="btn-icon" on:click={() => theme.toggle()} title="Cambiar tema">
@@ -156,6 +182,14 @@
     onStageClick={(key) => activeTab = key as Tab}
   />
 
+  {#if showPipeline}
+    <PipelineDrawer
+      runs={data.pipeline.runs}
+      collectors={data.pipeline.collectors}
+      on:close={() => showPipeline = false}
+    />
+  {/if}
+
   <main>
     {#if $navigating}
       <div class="skeleton-wrap">
@@ -165,14 +199,53 @@
         <div class="skeleton-line narrow"></div>
         <div class="skeleton-line med"></div>
       </div>
+    {:else if data.stats.total_signals === 0 && data.pipeline.runs.length === 0}
+      <!-- Empty state: no data, never run -->
+      <div class="empty-state">
+        <div class="empty-icon">🌱</div>
+        <h2 class="empty-title">Sin datos todavía</h2>
+        <p class="empty-body">Describe el mercado o profesional que quieres analizar y generamos la configuración automáticamente. Luego haz sync para empezar a recoger señales.</p>
+        <form class="seed-form" on:submit|preventDefault={submitSeed}>
+          <textarea
+            class="seed-input"
+            placeholder="Ej: gestores fiscales y asesores contables en España que necesitan herramientas para Verifactu y cumplimiento AEAT"
+            rows="3"
+            bind:value={seedDesc}
+            disabled={seedLoading}
+          ></textarea>
+          <div class="seed-actions">
+            <button class="btn-primary" type="submit" disabled={!seedDesc.trim() || seedLoading}>
+              {seedLoading ? 'Generando…' : 'Generar configuración'}
+            </button>
+            <button class="btn-sm" type="button" on:click={forceSync} disabled={syncRunning}>
+              {syncRunning ? 'En curso…' : '↻ Sync ahora'}
+            </button>
+          </div>
+          {#if seedResult}
+            <p class="seed-result" class:ok={seedResult.ok}>{seedResult.message}</p>
+          {/if}
+        </form>
+      </div>
     {:else if activeTab === 'senales'}
-      <SignalsTable signals={data.signals} />
+      {#if data.signals.length === 0}
+        <div class="tab-empty">Sin señales todavía. Haz sync para recoger las primeras señales.</div>
+      {:else}
+        <SignalsTable signals={data.signals} />
+      {/if}
     {:else if activeTab === 'dolor'}
-      <FrictionList profiles={data.painProfiles} />
+      {#if data.painProfiles.length === 0}
+        <div class="tab-empty">Sin perfiles de dolor. El análisis de fricción se ejecuta automáticamente en el próximo sync.</div>
+      {:else}
+        <FrictionList profiles={data.painProfiles} />
+      {/if}
     {:else if activeTab === 'segmentos'}
       <SectorsGrid discovery={data.discovery} />
     {:else if activeTab === 'oportunidades'}
-      <OpportunityList opportunities={data.opportunities} onStatusChange={() => invalidateAll()} />
+      {#if data.opportunities.length === 0}
+        <div class="tab-empty">Sin oportunidades scored todavía. Necesitas al menos algunas señales analizadas para que aparezcan aquí.</div>
+      {:else}
+        <OpportunityList opportunities={data.opportunities} onStatusChange={() => invalidateAll()} />
+      {/if}
     {:else if activeTab === 'radar'}
       <GapRadar
         entries={data.gapRadar}
@@ -235,6 +308,25 @@
   .skeleton-line.med    { width: 65%; }
   .skeleton-line.narrow { width: 40%; }
   @keyframes shimmer { 0%,100%{opacity:.45} 50%{opacity:.9} }
+
+  /* Empty state */
+  .empty-state  { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 48px 24px; text-align: center; }
+  .empty-icon   { font-size: 2.4rem; }
+  .empty-title  { font-size: 1.1rem; font-weight: 700; color: var(--text); margin: 0; }
+  .empty-body   { font-size: 0.82rem; color: var(--text-muted); max-width: 480px; line-height: 1.5; margin: 0; }
+
+  .seed-form    { width: 100%; max-width: 520px; display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+  .seed-input   { width: 100%; padding: 10px 12px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 0.82rem; resize: vertical; font-family: inherit; }
+  .seed-input:focus { outline: none; border-color: var(--violet); }
+  .seed-actions { display: flex; gap: 8px; }
+  .seed-result  { font-size: 0.78rem; color: var(--text-muted); }
+  .seed-result.ok { color: var(--violet); }
+
+  .btn-primary  { padding: 8px 18px; background: var(--violet); color: #fff; border: none; border-radius: 7px; font-size: 0.82rem; cursor: pointer; font-weight: 600; }
+  .btn-primary:disabled { opacity: .5; cursor: default; }
+
+  /* Per-tab empty state */
+  .tab-empty { padding: 40px 0; text-align: center; font-size: 0.82rem; color: var(--text-muted); }
 
   /* Config overlay */
   .config-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 200; display: flex; justify-content: flex-end; }

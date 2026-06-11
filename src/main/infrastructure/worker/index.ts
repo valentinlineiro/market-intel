@@ -39,7 +39,7 @@ import type { SendEmail } from './infrastructure/notify.js';
 import { collectGitHub } from './infrastructure/collectors/github.js';
 import { collectGnews }  from './infrastructure/collectors/gnews.js';
 import { buildRegistry } from './infrastructure/collectors/registry.js';
-import type { Config, FrictionProfile } from './domain/types.js';
+import type { Config, FrictionProfile, CronRun } from './domain/types.js';
 import type { ISignalRepo } from './application/ports.js';
 import { runCollect } from './application/collect.js';
 import { runScore } from './application/score.js';
@@ -198,9 +198,12 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
 
   try {
     if (path === '/run-cron' && method === 'POST') {
+      const runId = crypto.randomUUID();
+      const d1repo = new D1Repo(env.DB);
       const startedAt = new Date().toISOString();
-      ctx.waitUntil(runCronJob(env));
-      return ajson({ ok: true, started_at: startedAt });
+      await d1repo.insertCronRun({ id: runId, started_at: startedAt, finished_at: null, trigger: 'manual', fresh_signals: null, analyzed_signals: null, opps_updated: null, error: null });
+      ctx.waitUntil(runCronJob(env, 'manual', runId));
+      return ajson({ ok: true, run_id: runId, started_at: startedAt });
     }
 
     if (path === '/health' && method === 'GET') {
@@ -217,6 +220,23 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
         }
       } catch (e) { console.error('[health] failed to load collector health:', e instanceof Error ? e.message : e); }
       return ajson({ status: 'ok', ts: new Date().toISOString(), last_runs });
+    }
+
+    if (path === '/pipeline-status' && method === 'GET') {
+      const repo = new D1Repo(env.DB);
+      const [runs, collectors] = await Promise.all([
+        repo.getRecentCronRuns(5),
+        repo.getCollectorHealth(),
+      ]);
+      return ajson({ runs, collectors });
+    }
+
+    if (path.startsWith('/pipeline-status/') && method === 'GET') {
+      const runId = decodeURIComponent(path.slice('/pipeline-status/'.length));
+      const repo = new D1Repo(env.DB);
+      const runs = await repo.getRecentCronRuns(20);
+      const run = runs.find(r => r.id === runId) ?? null;
+      return ajson({ run });
     }
 
     if (path === '/signals' && method === 'GET')
@@ -611,83 +631,104 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
 // Cron job (extracted so both the scheduler and /run-cron call it directly)
 // ---------------------------------------------------------------------------
 
-async function runCronJob(env: Env): Promise<void> {
+async function runCronJob(env: Env, trigger: CronRun['trigger'] = 'scheduled', existingRunId?: string): Promise<void> {
   const cfg = await getConfig(env.DB);
   const d1repo = new D1Repo(env.DB);
   const llm = makeLlm(cfg.llm, env);
   const notifier = new EmailNotifier(env.EMAIL, cfg.notifications);
 
-  // Load previous discovery candidates to expand collection to discovered segments
-  const prevDiscovery = await d1repo.getLatestCandidates();
-  const discoveredSegments = (prevDiscovery?.candidates ?? []).map(c => ({
-    key:      c.segment,
-    keywords: c.raw_signals ?? [],
-  }));
-
-  // Collect (hardcoded segments + previously discovered ones)
-  const collectors = buildRegistry(cfg, env, discoveredSegments);
-  const { signals: fresh, stats } = await runCollect(d1repo, collectors);
-  const runAt = new Date().toISOString();
-  for (const stat of stats) {
-    try { await d1repo.upsertHealth(stat, runAt); } catch (e) { console.error(`[cron] upsertHealth failed for ${stat.id}:`, e instanceof Error ? e.message : e); }
+  const runId = existingRunId ?? crypto.randomUUID();
+  if (!existingRunId) {
+    await d1repo.insertCronRun({ id: runId, started_at: new Date().toISOString(), finished_at: null, trigger, fresh_signals: null, analyzed_signals: null, opps_updated: null, error: null });
   }
+
+  let freshCount   = 0;
+  let analyzedCount = 0;
+  let oppsUpdated  = 0;
+  let cronError: string | undefined;
+
   try {
-    const toAnalyze = await d1repo.getUnanalyzed();
-    await analyzeFriction(toAnalyze, llm, d1repo);
-  } catch (e) {
-    console.error('[cron] friction analysis failed (non-fatal):', e instanceof Error ? e.message : e);
-  }
-
-  // Auto-discover new segments from freshly analyzed signals
-  try {
-    const discoverTexts = fresh.map(s => s.raw_text).filter(Boolean).slice(0, 80) as string[];
-    if (discoverTexts.length >= 5) {
-      const hardcodedKeys = Object.keys(cfg.segments);
-      const knownSegments = [...hardcodedKeys, ...discoveredSegments.map(s => s.key)];
-      const newCandidates = await runDiscovery(llm, notifier, cfg.discover, discoverTexts, knownSegments);
-      if (newCandidates.length) {
-        const run_id = crypto.randomUUID();
-        await d1repo.saveCandidates(newCandidates, run_id);
-        console.log(`[cron] discovery done — ${newCandidates.length} candidates`);
-      }
-    }
-  } catch (e) {
-    console.error('[cron] discovery failed (non-fatal):', e instanceof Error ? e.message : e);
-  }
-
-  // If discovery produced nothing, seed candidates from hardcoded config segments
-  // so runScore always has at least the baseline segments to work with
-  if (!(await d1repo.hasCandidates())) {
-    const now = new Date().toISOString();
-    const run_id = crypto.randomUUID();
-    const seeds: import('./domain/types.js').DiscoveryCandidate[] = Object.entries(cfg.segments).map(([key, sc]) => ({
-      segment:         key,
-      label:           sc.label,
-      pain_summary:    '',
-      discovery_score: 5,
-      source_urls:     [],
-      raw_signals:     sc.keywords,
-      discovered_at:   now,
-      post_count:      0,
-      income_est:      sc.income_tier,
-      has_deadline:    sc.has_deadline,
+    // Load previous discovery candidates to expand collection to discovered segments
+    const prevDiscovery = await d1repo.getLatestCandidates();
+    const discoveredSegments = (prevDiscovery?.candidates ?? []).map(c => ({
+      key:      c.segment,
+      keywords: c.raw_signals ?? [],
     }));
-    await d1repo.saveCandidates(seeds, run_id);
+
+    // Collect (hardcoded segments + previously discovered ones)
+    const collectors = buildRegistry(cfg, env, discoveredSegments);
+    const { signals: fresh, stats } = await runCollect(d1repo, collectors);
+    freshCount = fresh.length;
+    const runAt = new Date().toISOString();
+    for (const stat of stats) {
+      try { await d1repo.upsertHealth(stat, runAt); } catch (e) { console.error(`[cron] upsertHealth failed for ${stat.id}:`, e instanceof Error ? e.message : e); }
+    }
+
+    try {
+      const toAnalyze = await d1repo.getUnanalyzed();
+      await analyzeFriction(toAnalyze, llm, d1repo);
+      analyzedCount = toAnalyze.length;
+    } catch (e) {
+      console.error('[cron] friction analysis failed (non-fatal):', e instanceof Error ? e.message : e);
+    }
+
+    // Auto-discover new segments from freshly analyzed signals
+    try {
+      const discoverTexts = fresh.map(s => s.raw_text).filter(Boolean).slice(0, 80) as string[];
+      if (discoverTexts.length >= 5) {
+        const hardcodedKeys = Object.keys(cfg.segments);
+        const knownSegments = [...hardcodedKeys, ...discoveredSegments.map(s => s.key)];
+        const newCandidates = await runDiscovery(llm, notifier, cfg.discover, discoverTexts, knownSegments);
+        if (newCandidates.length) {
+          const run_id = crypto.randomUUID();
+          await d1repo.saveCandidates(newCandidates, run_id);
+          console.log(`[cron] discovery done — ${newCandidates.length} candidates`);
+        }
+      }
+    } catch (e) {
+      console.error('[cron] discovery failed (non-fatal):', e instanceof Error ? e.message : e);
+    }
+
+    // If discovery produced nothing, seed candidates from hardcoded config segments
+    // so runScore always has at least the baseline segments to work with
+    if (!(await d1repo.hasCandidates())) {
+      const now = new Date().toISOString();
+      const run_id = crypto.randomUUID();
+      const seeds: import('./domain/types.js').DiscoveryCandidate[] = Object.entries(cfg.segments).map(([key, sc]) => ({
+        segment:         key,
+        label:           sc.label,
+        pain_summary:    '',
+        discovery_score: 5,
+        source_urls:     [],
+        raw_signals:     sc.keywords,
+        discovered_at:   now,
+        post_count:      0,
+        income_est:      sc.income_tier,
+        has_deadline:    sc.has_deadline,
+      }));
+      await d1repo.saveCandidates(seeds, run_id);
+    }
+
+    // Score
+    const scoreResults = await runScore(
+      { signals: d1repo, opportunities: d1repo, discovery: d1repo },
+      notifier,
+      cfg.score.top_n,
+      cfg.score.min_score,
+      cfg.score.dry_run,
+    );
+    oppsUpdated = scoreResults.length;
+
+    // Gap snapshot + scoring (runs after runScore so gap_score is fresh)
+    await runSnapshot(d1repo, d1repo);
+    await runGapScore(d1repo, d1repo);
+    console.log('[cron] gap snapshot + scoring done');
+  } catch (e) {
+    cronError = e instanceof Error ? e.message : String(e);
+    console.error('[cron] fatal error:', cronError);
   }
 
-  // Score
-  await runScore(
-    { signals: d1repo, opportunities: d1repo, discovery: d1repo },
-    notifier,
-    cfg.score.top_n,
-    cfg.score.min_score,
-    cfg.score.dry_run,
-  );
-
-  // Gap snapshot + scoring (runs after runScore so gap_score is fresh)
-  await runSnapshot(d1repo, d1repo);
-  await runGapScore(d1repo, d1repo);
-  console.log('[cron] gap snapshot + scoring done');
+  await d1repo.finishCronRun(runId, { fresh_signals: freshCount, analyzed_signals: analyzedCount, opps_updated: oppsUpdated, error: cronError });
 }
 
 // ---------------------------------------------------------------------------
