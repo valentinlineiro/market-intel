@@ -1,6 +1,6 @@
 import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
-import type { Stats, DiscoveryResult, Opportunity, Config, GapEntry } from '$lib/types.js';
+import type { Stats, DiscoveryResult, Opportunity, Config, GapEntry, SignalRow, PainProfile } from '$lib/types.js';
 
 function workerFetch(url: string, env: App.Platform['env'], init?: RequestInit): Promise<Response> {
   return fetch(url, {
@@ -22,7 +22,7 @@ export const load: PageServerLoad = async ({ platform }) => {
   const env  = (platform as App.Platform).env;
   const base = env.WORKER_URL.replace(/\/$/, '');
 
-  const [statsRes, oppsRes, leadsRes, discoveryRes, configRes, healthRes, gapRes] = await Promise.all([
+  const [statsRes, oppsRes, leadsRes, discoveryRes, configRes, healthRes, gapRes, signalsRes, painRes] = await Promise.all([
     fetch(`${base}/public/stats`),
     fetch(`${base}/public/opportunities`),
     fetch(`${base}/public/leads`),
@@ -30,16 +30,20 @@ export const load: PageServerLoad = async ({ platform }) => {
     fetch(`${base}/public/config`),
     workerFetch(`${base}/health`, env),
     workerFetch(`${base}/gap-radar`, env),
+    workerFetch(`${base}/signals?limit=200`, env),
+    fetch(`${base}/public/pain-profiles`),
   ]);
 
-  const [statsData, oppsData, leadsData, discoveryData, configData, healthData, gapData] = await Promise.all([
-    safeJson<Stats>(statsRes, { total_signals: 0, total_opportunities: 0, by_segment: {}, top_opportunity: null }),
+  const [statsData, oppsData, leadsData, discoveryData, configData, healthData, gapData, signalsData, painData] = await Promise.all([
+    safeJson<Stats>(statsRes, { total_signals: 0, total_opportunities: 0, analyzed_count: 0, by_segment: {}, top_opportunity: null }),
     safeJson<{ results: Opportunity[] }>(oppsRes, { results: [] }),
     safeJson<{ total: number; by_segment: Record<string, { email: string; captured_at: string; price_tier: string | null; lead_score: number }[]> }>(leadsRes, { total: 0, by_segment: {} }),
     safeJson<DiscoveryResult>(discoveryRes, { candidates: [], discovered_at: null, run_id: '' }),
     safeJson<{ config: Config }>(configRes, { config: {} as Config }),
     safeJson<{ status: string; last_runs: Record<string, { last_run_at: string; signal_count: number; error: string | null }> }>(healthRes, { status: 'error', last_runs: {} }),
     safeJson<GapEntry[]>(gapRes, []),
+    safeJson<SignalRow[]>(signalsRes, []),
+    safeJson<PainProfile[]>(painRes, []),
   ]);
 
   return {
@@ -50,6 +54,8 @@ export const load: PageServerLoad = async ({ platform }) => {
     config:        configData.config,
     health:        healthData,
     gapRadar:      gapData,
+    signals:       signalsData,
+    painProfiles:  painData,
   };
 };
 
@@ -59,14 +65,6 @@ export const actions: Actions = {
     const res = await workerFetch(`${env.WORKER_URL.replace(/\/$/, '')}/run-cron`, env, { method: 'POST' });
     if (!res.ok) return { success: false, error: `Error ${res.status}` };
     return { success: true };
-  },
-
-  discover: async ({ platform }) => {
-    const env = (platform as App.Platform).env;
-    const res = await workerFetch(`${env.WORKER_URL.replace(/\/$/, '')}/discover`, env, { method: 'POST', body: '{}' });
-    const data = await res.json() as { run_id?: string; candidates?: unknown[]; error?: string; message?: string };
-    if (!res.ok) return { success: false, error: data.error ?? `Error ${res.status}` };
-    return { success: true, count: data.candidates?.length ?? 0, message: data.message };
   },
 
   deploy: async ({ request, platform }) => {
