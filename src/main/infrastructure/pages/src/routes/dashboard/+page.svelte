@@ -218,7 +218,9 @@
         <div class="skeleton-line narrow"></div>
         <div class="skeleton-line med"></div>
       </div>
-    {:else if data.stats.total_signals === 0 && data.pipeline.runs.length === 0}
+    {/if}
+
+    {#if !$navigating && data.stats.total_signals === 0 && data.pipeline.runs.length === 0}
       <!-- Empty state: no data, never run -->
       <div class="empty-state">
         <div class="empty-icon">🌱</div>
@@ -245,39 +247,42 @@
           {/if}
         </form>
       </div>
-    {:else if activeTab === 'senales'}
+    {:else if !$navigating && activeTab === 'senales'}
       {#if data.signals.length === 0}
         <div class="tab-empty">Sin señales todavía. Haz sync para recoger las primeras señales.</div>
       {:else}
         {#if data.velocity.length > 0}
-        <div class="velocity-section">
-          <div class="velocity-label">Señales por semana (todos los segmentos)</div>
-          <VelocityChart rows={data.velocity} segment={null} />
-        </div>
+          <div class="velocity-section">
+            <div class="velocity-label">Señales por semana (todos los segmentos)</div>
+            <VelocityChart rows={data.velocity} segment={null} />
+          </div>
+        {/if}
+        <SignalsTable signals={data.signals} />
       {/if}
-      <SignalsTable signals={data.signals} />
-      {/if}
-    {:else if activeTab === 'dolor'}
+    {:else if !$navigating && activeTab === 'dolor'}
       {#if data.painProfiles.length === 0}
         <div class="tab-empty">Sin perfiles de dolor. El análisis de fricción se ejecuta automáticamente en el próximo sync.</div>
       {:else}
         <FrictionList profiles={data.painProfiles} />
       {/if}
-    {:else if activeTab === 'segmentos'}
+    {:else if !$navigating && activeTab === 'segmentos'}
       <SectorsGrid discovery={data.discovery} />
-    {:else if activeTab === 'oportunidades'}
-      {#if data.opportunities.length === 0}
-        <div class="tab-empty">Sin oportunidades scored todavía. Necesitas al menos algunas señales analizadas para que aparezcan aquí.</div>
+    {:else if !$navigating}
+      {#if activeTab === 'radar'}
+        <GapRadar
+          entries={data.gapRadar}
+          on:deploy={e => { deploySegment = e.detail; showDeploy = true; }}
+        />
+      {:else if activeTab === 'leads'}
+        <LeadsTable bySegment={data.leads.by_segment} total={data.leads.total} />
       {:else}
-        <OpportunityList opportunities={data.opportunities} {diversityMap} velocity={data.velocity} onStatusChange={() => invalidateAll()} />
+        <!-- oportunidades (default) -->
+        {#if data.opportunities.length === 0}
+          <div class="tab-empty">Sin oportunidades scored todavía. Necesitas al menos algunas señales analizadas para que aparezcan aquí.</div>
+        {:else}
+          <OpportunityList opportunities={data.opportunities} {diversityMap} velocity={data.velocity} onStatusChange={() => invalidateAll()} />
+        {/if}
       {/if}
-    {:else if activeTab === 'radar'}
-      <GapRadar
-        entries={data.gapRadar}
-        on:deploy={e => { deploySegment = e.detail; showDeploy = true; }}
-      />
-    {:else if activeTab === 'leads'}
-      <LeadsTable bySegment={data.leads.by_segment} total={data.leads.total} />
     {/if}
   </main>
 </div>
