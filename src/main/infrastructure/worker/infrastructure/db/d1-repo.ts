@@ -29,7 +29,7 @@ import type {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function profileToSlug(profile: string): string {
+export function profileToSlug(profile: string): string {
   return profile
     .normalize('NFD').replace(/[̀-ͯ]/g, '')
     .toLowerCase()
