@@ -20,6 +20,7 @@
  *   POST   /score
  *   POST   /market-test
  *   GET    /market-test/:id
+ *   POST   /discovery/promote
  *
  * Public routes (no auth required):
  *   GET    /public/stats
@@ -32,7 +33,7 @@
  */
 
 import { getConfig, setConfig, invalidateCache, DEFAULT_CONFIG } from './infrastructure/config.js';
-import { D1Repo } from './infrastructure/db/d1-repo.js';
+import { D1Repo, profileToSlug } from './infrastructure/db/d1-repo.js';
 import { LLMChain } from './infrastructure/llm/chain.js';
 import { EmailNotifier } from './infrastructure/notify.js';
 import type { SendEmail } from './infrastructure/notify.js';
@@ -626,6 +627,48 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
       return ajson({ ok: true, segments: seed.segments });
     }
 
+    if (path === '/discovery/promote' && method === 'POST') {
+      if (!hasLlmKey(env)) return ajson({ error: 'LLM key not configured' }, 503);
+      const { profile, keywords, income_est, has_deadline } =
+        await request.json() as { profile?: string; keywords?: string[]; income_est?: string | null; has_deadline?: boolean };
+      if (!profile?.trim()) return ajson({ error: 'profile required' }, 400);
+
+      const cfg = await getConfig(env.DB);
+      const slug = profileToSlug(profile);
+
+      if (cfg.segments[slug]) return ajson({ ok: false, error: 'already_active' }, 409);
+
+      const llm = makeLlm(cfg.llm, env);
+      let queries: string[];
+      try {
+        const raw = await llm.complete(
+          `Given this professional profile: "${profile}"\nAnd these pain keywords: ${(keywords ?? []).join(', ')}\nGenerate 2-3 Google News search strings (in Spanish) that would find articles about their specific problems.\nReturn ONLY a JSON array of strings, nothing else.`,
+          200,
+        );
+        const start = raw.indexOf('['); const end = raw.lastIndexOf(']');
+        queries = start !== -1 && end !== -1 ? JSON.parse(raw.slice(start, end + 1)) as string[] : [];
+        if (!queries.length) throw new Error('empty');
+      } catch {
+        queries = [`${profile} problema`, `${profile} España`];
+      }
+
+      const newSegment: import('./domain/types.js').MarketSegment = {
+        label:        profile,
+        queries,
+        keywords:     keywords ?? [],
+        income_tier:  income_est ?? 'medium',
+        has_deadline: has_deadline ?? false,
+      };
+
+      await setConfig(env.DB, { segments: { ...cfg.segments, [slug]: newSegment } });
+      invalidateCache();
+
+      const runId = crypto.randomUUID();
+      ctx.waitUntil(runFocusedSync(env, slug, runId));
+
+      return ajson({ ok: true, segment: slug, run_id: runId });
+    }
+
     return ajson({ error: 'not found' }, 404);
 
   } catch (err) {
@@ -738,6 +781,85 @@ async function runCronJob(env: Env, trigger: CronRun['trigger'] = 'scheduled', e
   }
 
   await d1repo.finishCronRun(runId, { fresh_signals: freshCount, analyzed_signals: analyzedCount, opps_updated: oppsUpdated, error: cronError });
+}
+
+// ---------------------------------------------------------------------------
+// Focused sync (single segment, triggered by /discovery/promote)
+// ---------------------------------------------------------------------------
+
+async function runFocusedSync(env: Env, segmentKey: string, runId: string): Promise<void> {
+  const cfg = await getConfig(env.DB);
+  const seg = cfg.segments[segmentKey];
+  if (!seg) return; // segment removed between promote and sync start
+
+  const d1repo = new D1Repo(env.DB);
+  const llm = makeLlm(cfg.llm, env);
+  const notifier = new EmailNotifier(env.EMAIL, cfg.notifications);
+
+  await d1repo.insertCronRun({
+    id: runId,
+    started_at: new Date().toISOString(),
+    finished_at: null,
+    trigger: 'manual',
+    fresh_signals: null,
+    analyzed_signals: null,
+    opps_updated: null,
+    error: null,
+  });
+
+  let freshCount = 0;
+  let analyzedCount = 0;
+  let cronError: string | undefined;
+
+  try {
+    const focusedCfg: Config = { ...cfg, segments: { [segmentKey]: seg } };
+    const collectors = buildRegistry(focusedCfg, env, []);
+    const { signals: fresh } = await runCollect(d1repo, collectors);
+    freshCount = fresh.length;
+
+    if (fresh.length) {
+      try {
+        await analyzeFriction(fresh, llm, d1repo, 0.85, cfg.friction?.min_strength ?? 0);
+        analyzedCount = fresh.length;
+      } catch (e) {
+        console.error('[focused-sync] friction failed (non-fatal):', e instanceof Error ? e.message : e);
+      }
+    }
+
+    await runScore(
+      {
+        signals: d1repo,
+        opportunities: d1repo,
+        discovery: {
+          saveCandidates: (candidates) => d1repo.saveCandidates(candidates),
+          getLatestCandidates: () => d1repo.getLatestCandidates(),
+          getSegmentsToScore: async () => [{
+            key:             segmentKey,
+            label:           seg.label,
+            keywords:        seg.keywords,
+            income_tier:     seg.income_tier,
+            has_deadline:    seg.has_deadline,
+            discovery_score: 5,
+          }],
+        },
+      },
+      notifier,
+      1,
+      0,
+      false,
+      hasLlmKey(env) ? llm : undefined,
+    );
+  } catch (e) {
+    cronError = e instanceof Error ? e.message : String(e);
+    console.error('[focused-sync] error:', cronError);
+  }
+
+  await d1repo.finishCronRun(runId, {
+    fresh_signals: freshCount,
+    analyzed_signals: analyzedCount,
+    opps_updated: 1,
+    error: cronError,
+  });
 }
 
 // ---------------------------------------------------------------------------
