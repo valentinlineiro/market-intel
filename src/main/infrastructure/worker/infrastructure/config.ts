@@ -5,36 +5,7 @@ let cachedConfig: Config | null = null;
 let cachedVersion: string | null = null;
 
 export const DEFAULT_CONFIG: Config = {
-  segments: {
-    dentista: {
-      label: 'Odontólogo / Clínica dental',
-      queries: ['verifactu dentista', 'software dental hacienda', 'facturación electrónica clínica dental', 'RRSIF odontología'],
-      keywords: ['verifactu', 'hacienda', 'facturación', 'rrsif', 'multa', 'gestión clínica'],
-      income_tier: 'high',
-      has_deadline: true,
-    },
-    docente_universitario: {
-      label: 'Docente universitario',
-      queries: ['ANECA acreditación universidad', 'sexenio investigación problema', 'Docentia evaluación docente'],
-      keywords: ['aneca', 'acreditación', 'sexenio', 'docentia', 'plaza'],
-      income_tier: 'medium_high',
-      has_deadline: false,
-    },
-    abogado_autonomo: {
-      label: 'Abogado autónomo',
-      queries: ['LexNet abogados problema', 'facturación electrónica abogados autónomos'],
-      keywords: ['lexnet', 'facturación', 'irpf', 'turno oficio', 'honorarios'],
-      income_tier: 'medium_high',
-      has_deadline: false,
-    },
-    arquitecto: {
-      label: 'Arquitecto',
-      queries: ['visado colegial arquitectos', 'licencia obras ayuntamiento lentitud'],
-      keywords: ['visado colegial', 'licencia obras', 'burocracia', 'certificado energético'],
-      income_tier: 'medium',
-      has_deadline: false,
-    },
-  },
+  segments: {},
   score: {
     top_n: 10,
     min_score: 5.0,
@@ -110,6 +81,8 @@ export async function getConfig(db: D1Database): Promise<Config> {
   if (row) {
     const stored = JSON.parse(row['value'] as string) as Partial<Config>;
     cachedConfig = deepMerge(structuredClone(DEFAULT_CONFIG), stored);
+    // segments replaces defaults entirely — never merge hardcoded + stored
+    if (stored.segments !== undefined) cachedConfig.segments = stored.segments as Config['segments'];
     cachedVersion = row['updated_at'] as string;
     return cachedConfig;
   }
@@ -119,6 +92,8 @@ export async function getConfig(db: D1Database): Promise<Config> {
 export async function setConfig(db: D1Database, updates: Partial<Config>): Promise<void> {
   const current = await getConfig(db);
   const merged = deepMerge(structuredClone(current), updates);
+  // segments replaces entirely — never accumulate on top of prior set
+  if (updates.segments !== undefined) merged.segments = updates.segments;
   const now = new Date().toISOString();
   await db.prepare(
     `INSERT INTO config (key, value, updated_at) VALUES ('app', ?, ?)
