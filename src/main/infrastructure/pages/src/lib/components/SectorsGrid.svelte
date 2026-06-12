@@ -28,6 +28,7 @@
 
   async function promote(c: DiscoveryResult['candidates'][number]) {
     const key = toSlug(c.profile ?? '');
+    if (!key) return;
     states = { ...states, [key]: 'loading' };
     try {
       const res = await fetch('/api/discovery/promote', {
@@ -78,9 +79,9 @@
         <div class="meta">{c.post_count} posts · {c.income_est ?? '—'}</div>
 
         {#if effectiveState === 'idle'}
-          <button class="promote-btn" on:click={() => promote(c)}>Promover →</button>
+          <button type="button" class="promote-btn" on:click={() => promote(c)}>Promover →</button>
         {:else if effectiveState === 'loading'}
-          <span class="promote-loading"><span class="spinner-sm"></span> Promoviendo…</span>
+          <span class="promote-loading"><span class="spinner-sm" aria-hidden="true"></span> Promoviendo…</span>
         {:else if effectiveState === 'promoted'}
           {#if fromServer}
             <span class="badge-active">✓ Activo</span>
@@ -88,7 +89,7 @@
             <span class="badge-active">✓ Activo · sync iniciado</span>
           {/if}
         {:else if effectiveState === 'error'}
-          <button class="promote-btn promote-err" on:click={() => promote(c)}>Promover →</button>
+          <button type="button" class="promote-btn promote-err" on:click={() => promote(c)}>Promover →</button>
           <span class="err-line">Error — reintentar</span>
         {/if}
       </div>
