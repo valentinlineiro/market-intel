@@ -11,6 +11,7 @@ import { runScore } from '../application/score.js';
 import { runMarketTest } from '../application/market-test.js';
 import { collectGnews } from '../infrastructure/collectors/gnews.js';
 import { LLMChain } from '../infrastructure/llm/chain.js';
+import { seedCandidatesFromConfig } from '../domain/candidates.js';
 import { json, makeLlm, hasLlmKey, authCors, PUBLIC_CORS } from '../index.js';
 import type { Env } from '../index.js';
 
@@ -62,13 +63,10 @@ export async function handleScore(env: Env, body: { top_n?: number; min_score?: 
   const llm = makeLlm(cfg.llm, env);
   const notifier = new EmailNotifier(env.EMAIL, cfg.notifications);
   if (!(await d1repo.hasCandidates())) {
-    const now = new Date().toISOString();
-    const seeds: import('../domain/types.js').DiscoveryCandidate[] = Object.entries(cfg.segments).map(([key, sc]) => ({
-      segment: key, label: sc.label, pain_summary: '', discovery_score: 5,
-      source_urls: [], raw_signals: sc.keywords, discovered_at: now,
-      post_count: 0, income_est: sc.income_tier, has_deadline: sc.has_deadline,
-    }));
-    await d1repo.saveCandidates(seeds, crypto.randomUUID());
+    await d1repo.saveCandidates(
+      seedCandidatesFromConfig(cfg.segments, new Date().toISOString()),
+      crypto.randomUUID(),
+    );
   }
   const results = await runScore(
     { signals: d1repo, opportunities: d1repo, discovery: d1repo },

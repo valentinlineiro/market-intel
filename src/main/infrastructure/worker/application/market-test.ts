@@ -1,5 +1,6 @@
 import type { ISignalRepo, ILLMProvider, IMarketTestRepo } from './ports.js';
 import type { Signal, GnewsSegmentConfig, MarketTestResult, FrictionProfile } from '../domain/types.js';
+import { extractJsonObject } from '../domain/llm-json.js';
 import { runCollect } from './collect.js';
 import {
   dolorScore,
@@ -70,12 +71,10 @@ async function generateSegmentConfig(
   llm: ILLMProvider,
 ): Promise<GnewsSegmentConfig> {
   const prompt = CONFIG_PROMPT.replace('{description}', description);
-  let raw = await llm.complete(prompt, 400);
-  raw = raw.replace(/^```[\w]*\n?/, '').replace(/\n?```$/, '').trim();
-  const start = raw.indexOf('{');
-  const end = raw.lastIndexOf('}');
-  if (start === -1 || end === -1) throw new Error(`LLM returned no JSON object: ${raw.slice(0, 80)}`);
-  return JSON.parse(raw.slice(start, end + 1)) as GnewsSegmentConfig;
+  const raw = await llm.complete(prompt, 400);
+  const obj = extractJsonObject(raw);
+  if (!obj) throw new Error(`LLM returned no JSON object: ${raw.slice(0, 80)}`);
+  return obj as unknown as GnewsSegmentConfig;
 }
 
 export async function runMarketTest(

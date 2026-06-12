@@ -1,6 +1,6 @@
 import type { Signal, Opportunity, Lead, DiscoveryCandidate, SegmentConfig,
   GnewsSegmentConfig, MarketTest, MarketTestResult, FrictionProfile,
-  CollectorStat, SignalSnapshot } from '../domain/types.js';
+  CollectorStat, SignalSnapshot, CronRun } from '../domain/types.js';
 
 export interface ISignalRepo {
   save(signal: Signal): Promise<boolean>;
@@ -27,8 +27,9 @@ export interface ILeadRepo {
 }
 
 export interface IDiscoveryRepo {
-  saveCandidates(candidates: DiscoveryCandidate[]): Promise<void>;
+  saveCandidates(candidates: DiscoveryCandidate[], runId?: string): Promise<void>;
   getLatestCandidates(): Promise<{ candidates: DiscoveryCandidate[]; discovered_at: string } | null>;
+  hasCandidates(): Promise<boolean>;
   getSegmentsToScore(topN: number, minScore: number): Promise<SegmentConfig[]>;
 }
 
@@ -71,7 +72,16 @@ export interface ICollectorHealthRepo {
 }
 
 export interface ICronLogRepo {
-  insertCronRun(run: import('../domain/types.js').CronRun): Promise<void>;
+  insertCronRun(run: CronRun): Promise<void>;
   finishCronRun(id: string, fields: { fresh_signals: number; analyzed_signals: number; opps_updated: number; error?: string }): Promise<void>;
-  getRecentCronRuns(limit?: number): Promise<import('../domain/types.js').CronRun[]>;
+  getRecentCronRuns(limit?: number): Promise<CronRun[]>;
+}
+
+export interface ICronRepos {
+  signals:         ISignalRepo;
+  opportunities:   IOpportunityRepo;
+  discovery:       IDiscoveryRepo;
+  collectorHealth: ICollectorHealthRepo;
+  cronLog:         ICronLogRepo;
+  snapshots:       ISignalSnapshotRepo;
 }

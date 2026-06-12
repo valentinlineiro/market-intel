@@ -49,7 +49,7 @@ export async function runSnapshot(
     bySegment.set(signal.segment, group);
   }
 
-  for (const [segment, segs] of bySegment) {
+  await Promise.all([...bySegment.entries()].map(([segment, segs]) => {
     const withPain = segs.filter(s => s.signal_strength !== null);
     const avg_pain = withPain.length > 0
       ? (withPain.reduce((sum, s) => sum + s.signal_strength!, 0) / withPain.length) * 10
@@ -57,8 +57,8 @@ export async function runSnapshot(
     const solutionCount  = segs.filter(isSolution).length;
     const solution_ratio = segs.length > 0 ? solutionCount / segs.length : 0;
 
-    await snapshotRepo.upsertSnapshot({ segment, week, count: segs.length, avg_pain, solution_ratio });
-  }
+    return snapshotRepo.upsertSnapshot({ segment, week, count: segs.length, avg_pain, solution_ratio });
+  }));
 }
 
 export async function runGapScore(
@@ -67,20 +67,28 @@ export async function runGapScore(
 ): Promise<void> {
   const opportunities = await opportunityRepo.getAll();
 
-  for (const opp of opportunities) {
-    const snapshots = await snapshotRepo.getSnapshots(opp.segment, 5);
-    if (snapshots.length === 0) continue;
+  const scored = await Promise.all(
+    opportunities.map(async opp => {
+      const snapshots = await snapshotRepo.getSnapshots(opp.segment, 5);
+      if (snapshots.length === 0) return null;
 
-    const latest = snapshots[0]!;
-    const prior  = snapshots.slice(1);
-    const priorAvg = prior.length > 0
-      ? prior.reduce((sum, s) => sum + s.count, 0) / prior.length
-      : latest.count;
+      const latest   = snapshots[0]!;
+      const prior    = snapshots.slice(1);
+      const priorAvg = prior.length > 0
+        ? prior.reduce((sum, s) => sum + s.count, 0) / prior.length
+        : latest.count;
 
-    const momentum  = latest.count / Math.max(priorAvg, 1);
-    const rawScore  = (latest.avg_pain / 10) * momentum * (1 - latest.solution_ratio);
-    const gap_score = Math.min(Math.round(rawScore / 3 * 100), 100);
+      const momentum  = latest.count / Math.max(priorAvg, 1);
+      const rawScore  = (latest.avg_pain / 10) * momentum * (1 - latest.solution_ratio);
+      const gap_score = Math.min(Math.round(rawScore / 3 * 100), 100);
 
-    await opportunityRepo.updateGapScore(opp.segment, gap_score);
-  }
+      return { segment: opp.segment, gap_score };
+    }),
+  );
+
+  await Promise.all(
+    scored
+      .filter((r): r is { segment: string; gap_score: number } => r !== null)
+      .map(r => opportunityRepo.updateGapScore(r.segment, r.gap_score)),
+  );
 }

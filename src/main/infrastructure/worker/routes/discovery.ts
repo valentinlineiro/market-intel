@@ -11,61 +11,12 @@ import { synthesizeCopy, buildHtml } from '../application/synthesize.js';
 import { runFocusedSync } from '../application/cron.js';
 import { runDiscovery } from '../application/discover.js';
 import { EmailNotifier } from '../infrastructure/notify.js';
+import { buildRegistry } from '../infrastructure/collectors/registry.js';
+import { collectDiscoveryTexts } from '../infrastructure/text-sources.js';
+import { extractJsonArray } from '../domain/llm-json.js';
 import { json, makeLlm, hasLlmKey, authCors, PUBLIC_CORS } from '../index.js';
+import type { ICronRepos } from '../application/ports.js';
 import type { Env } from '../index.js';
-
-async function collectDiscoveryTexts(limit = 60): Promise<string[]> {
-  const texts: string[] = [];
-
-  const hnQueries = [
-    'freelancer pain problem',
-    'professional software problem',
-    'pequeña empresa problema gestión',
-    'autónomo problema hacienda',
-  ];
-
-  const newsQueries = [
-    'autónomos problema España',
-    'profesionales freelance queja',
-    'pyme gestión problema',
-  ];
-
-  for (const query of hnQueries) {
-    if (texts.length >= limit) break;
-    try {
-      const url = `https://hn.algolia.com/api/v1/search?query=${encodeURIComponent(query)}&tags=story,ask_hn&hitsPerPage=12`;
-      const res = await fetch(url, { headers: { 'User-Agent': 'market-intel/0.1' } });
-      if (!res.ok) continue;
-      const data = await res.json() as { hits?: Array<{ title?: string; story_text?: string }> };
-      for (const hit of data.hits ?? []) {
-        const title = (hit.title ?? '').trim();
-        const body  = (hit.story_text ?? '').slice(0, 200).trim();
-        if (title) texts.push(body ? `${title} — ${body}` : title);
-      }
-    } catch (e) {
-      console.error(`HN broad '${query}':`, e instanceof Error ? e.message : String(e));
-    }
-  }
-
-  for (const query of newsQueries) {
-    if (texts.length >= limit) break;
-    try {
-      const url = `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=es&gl=ES&ceid=ES:es`;
-      const res = await fetch(url, { headers: { 'User-Agent': 'market-intel/0.1' } });
-      if (!res.ok) continue;
-      const text = await res.text();
-      const matches = [...text.matchAll(/<title><!\[CDATA\[([^\]]+)\]\]><\/title>|<title>([^<]+)<\/title>/g)];
-      for (const m of matches.slice(1, 11)) {
-        const title = ((m[1] ?? m[2] ?? '') as string).trim();
-        if (title) texts.push(title);
-      }
-    } catch (e) {
-      console.error(`News RSS '${query}':`, e instanceof Error ? e.message : String(e));
-    }
-  }
-
-  return texts.slice(0, limit);
-}
 
 export async function handleGetDiscovery(d1repo: D1Repo): Promise<Response> {
   const latest = await d1repo.getLatestCandidates();
@@ -285,8 +236,8 @@ export async function handleDiscoveryPromote(env: Env, ctx: ExecutionContext, bo
       `Given this professional profile: "${profile}"\nAnd these pain keywords: ${(keywords ?? []).join(', ')}\nGenerate 2-3 Google News search strings (in Spanish) that would find articles about their specific problems.\nReturn ONLY a JSON array of strings, nothing else.`,
       200,
     );
-    const start = raw.indexOf('['); const end = raw.lastIndexOf(']');
-    queries = start !== -1 && end !== -1 ? JSON.parse(raw.slice(start, end + 1)) as string[] : [];
+    const parsed = extractJsonArray(raw);
+    queries = Array.isArray(parsed) && parsed.length > 0 ? parsed as string[] : [];
     if (!queries.length) throw new Error('empty');
   } catch {
     queries = [`${profile} problema`, `${profile} España`];
@@ -303,10 +254,25 @@ export async function handleDiscoveryPromote(env: Env, ctx: ExecutionContext, bo
   await setConfig(env.DB, { segments: { ...cfg.segments, [slug]: newSegment } });
   invalidateCache();
 
-  const runId = crypto.randomUUID();
-  const d1repoForRun = new D1Repo(env.DB);
-  await d1repoForRun.insertCronRun({ id: runId, started_at: new Date().toISOString(), finished_at: null, trigger: 'manual', fresh_signals: null, analyzed_signals: null, opps_updated: null, error: null });
-  ctx.waitUntil(runFocusedSync(env, slug, runId));
+  const runId    = crypto.randomUUID();
+  const d1repo   = new D1Repo(env.DB);
+  await d1repo.insertCronRun({
+    id: runId, started_at: new Date().toISOString(), finished_at: null,
+    trigger: 'manual', fresh_signals: null, analyzed_signals: null, opps_updated: null, error: null,
+  });
+
+  const repos: ICronRepos = {
+    signals: d1repo, opportunities: d1repo, discovery: d1repo,
+    collectorHealth: d1repo, cronLog: d1repo, snapshots: d1repo,
+  };
+  const notifier   = new EmailNotifier(env.EMAIL, cfg.notifications);
+  const focusedCfg = { ...cfg, segments: { [slug]: newSegment } };
+  const collectors = buildRegistry(focusedCfg, env, []);
+
+  ctx.waitUntil(runFocusedSync(
+    repos, llm, notifier, collectors,
+    slug, profile, keywords ?? [], income_est ?? 'medium', has_deadline ?? false, runId,
+  ));
 
   return json({ ok: true, segment: slug, run_id: runId }, 200, cors);
 }

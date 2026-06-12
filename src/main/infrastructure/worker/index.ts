@@ -7,7 +7,7 @@
 import { D1Repo } from './infrastructure/db/d1-repo.js';
 import { LLMChain } from './infrastructure/llm/chain.js';
 import type { Config } from './domain/types.js';
-import { runCronJob } from './application/cron.js';
+import { triggerCronJob } from './routes/cron.js';
 
 // Route Handlers
 import {
@@ -329,7 +329,7 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
 };
 
 const scheduled: ExportedHandlerScheduledHandler<Env> = (_event, env, ctx) => {
-  ctx.waitUntil(runCronJob(env));
+  ctx.waitUntil(triggerCronJob(env, 'scheduled'));
 };
 
 export default { fetch: handleFetch, scheduled } satisfies ExportedHandler<Env>;

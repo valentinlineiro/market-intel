@@ -1,5 +1,6 @@
 import type { ILLMProvider, INotifier } from './ports.js';
 import type { DiscoveryCandidate, Config } from '../domain/types.js';
+import { extractJsonArray } from '../domain/llm-json.js';
 
 const CLUSTER_PROMPT = `Analiza estos textos de noticias y foros profesionales.
 Identifica perfiles profesionales con dolores recurrentes NO incluidos en: {known}.
@@ -76,13 +77,9 @@ async function clusterBatch(
     .replace('{posts}', texts.map((t, i) => `${i + 1}. ${t}`).join('\n'));
 
   try {
-    let raw = await llm.complete(prompt, 600);
-    raw = raw.replace(/^```[\w]*\n?/, '').replace(/\n?```$/, '').trim();
-    const parsed: unknown = JSON.parse(raw);
-    if (Array.isArray(parsed)) {
-      return parsed as RawCluster[];
-    }
-    return [parsed as RawCluster];
+    const raw = await llm.complete(prompt, 600);
+    const parsed = extractJsonArray(raw);
+    return parsed ? parsed as RawCluster[] : [];
   } catch (e) {
     console.error('cluster batch failed:', e instanceof Error ? e.message : String(e));
     return [];

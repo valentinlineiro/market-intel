@@ -1,6 +1,7 @@
 import type { Signal, FrictionProfile } from '../domain/types.js';
 import type { ILLMProvider, ISignalRepo } from './ports.js';
 import { clusterSignals } from '../domain/cluster.js';
+import { extractJsonArray } from '../domain/llm-json.js';
 
 const BATCH_SIZE = 6;
 
@@ -35,20 +36,6 @@ function formatBatch(signals: Signal[]): string {
   ).join('\n\n');
 }
 
-function extractArray(raw: string): unknown[] | null {
-  const arrStart = raw.indexOf('[');
-  const arrEnd = raw.lastIndexOf(']');
-  if (arrStart !== -1 && arrEnd !== -1) {
-    const parsed = JSON.parse(raw.slice(arrStart, arrEnd + 1));
-    if (Array.isArray(parsed)) return parsed;
-  }
-  // Fallback: LLM returned a bare object instead of a single-element array.
-  const objStart = raw.indexOf('{');
-  const objEnd = raw.lastIndexOf('}');
-  if (objStart === -1 || objEnd === -1) return null;
-  const parsed = JSON.parse(raw.slice(objStart, objEnd + 1));
-  return parsed != null && typeof parsed === 'object' && !Array.isArray(parsed) ? [parsed] : null;
-}
 
 export async function analyzeFriction(
   signals: Signal[],
@@ -72,9 +59,8 @@ export async function analyzeFriction(
     const prompt = BATCH_PROMPT.replace('{signals}', formatBatch(batchReps));
 
     try {
-      let raw = await llm.complete(prompt, 250 * batchReps.length);
-      raw = raw.replace(/^```[\w]*\n?/, '').replace(/\n?```$/, '').trim();
-      const entries = extractArray(raw);
+      const raw = await llm.complete(prompt, 250 * batchReps.length);
+      const entries = extractJsonArray(raw);
       if (!entries) continue;
 
       for (const entry of entries) {

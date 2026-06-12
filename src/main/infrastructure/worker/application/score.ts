@@ -72,8 +72,11 @@ export async function runScore(
   const results: ScoreResult[] = [];
 
   for (const seg of segments) {
-    const signals = await repos.signals.get(seg.key, 500);
-    const signalCount = await repos.signals.count(seg.key);
+    const [signals, existing] = await Promise.all([
+      repos.signals.get(seg.key, 500),
+      repos.opportunities.getBySegment(seg.key),
+    ]);
+    const signalCount = signals.length;
 
     const [dolor, painSummary] = dolorScore(signals);
     const breakdown: ScoreBreakdown = {
@@ -84,8 +87,6 @@ export async function runScore(
       urgencia: urgencyScore(seg.has_deadline),
     };
     const score = computeOpportunityScore(breakdown);
-
-    const existing = await repos.opportunities.getBySegment(seg.key);
 
     let narrative: string | null = existing?.score_narrative ?? null;
     // Regenerate when score changed by ≥0.5 or no narrative exists yet
