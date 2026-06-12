@@ -138,6 +138,7 @@ describe('D1Repo', () => {
       'signal_snapshots',
       'config',
       'collector_health',
+      'cron_steps',
       'cron_log',
     ];
     for (const table of tables) {
@@ -633,6 +634,61 @@ describe('D1Repo', () => {
       expect(ids).toContain('r1');
       expect(ids).toContain('r2');
       expect(ids).not.toContain('r3');
+    });
+  });
+
+  describe('cron_steps', () => {
+    const runId = 'cron-steps-test-run';
+    const now   = new Date().toISOString();
+
+    beforeEach(async () => {
+      await env.DB.exec(`DELETE FROM cron_steps WHERE run_id = '${runId}'`);
+    });
+
+    async function insertParentRun() {
+      await repo.insertCronRun({
+        id: runId, started_at: now, finished_at: null, trigger: 'manual',
+        fresh_signals: null, analyzed_signals: null, opps_updated: null, error: null,
+      });
+    }
+
+    it('writes running status then updates to done via upsert', async () => {
+      await insertParentRun();
+
+      await repo.upsertCronStep(runId, 'collect', 'running', now);
+      const running = await repo.getCronSteps(runId);
+      expect(running).toHaveLength(1);
+      expect(running[0].step).toBe('collect');
+      expect(running[0].status).toBe('running');
+      expect(running[0].finished_at).toBeNull();
+      expect(running[0].detail).toBeNull();
+
+      const fin = new Date().toISOString();
+      await repo.upsertCronStep(runId, 'collect', 'done', now, fin, { signals: 42 });
+      const done = await repo.getCronSteps(runId);
+      expect(done).toHaveLength(1);
+      expect(done[0].status).toBe('done');
+      expect(done[0].finished_at).toBe(fin);
+      expect(done[0].detail).toEqual({ signals: 42 });
+    });
+
+    it('returns steps ordered by started_at ascending', async () => {
+      await insertParentRun();
+      const t1 = new Date(Date.now() - 5000).toISOString();
+      const t2 = new Date(Date.now() - 3000).toISOString();
+      await repo.upsertCronStep(runId, 'friction', 'done', t2, new Date().toISOString(), { analyzed: 10 });
+      await repo.upsertCronStep(runId, 'collect',  'done', t1, t2, { signals: 20 });
+      const steps = await repo.getCronSteps(runId);
+      expect(steps[0].step).toBe('collect');
+      expect(steps[1].step).toBe('friction');
+    });
+
+    it('parses detail_json as an object, not a string', async () => {
+      await insertParentRun();
+      await repo.upsertCronStep(runId, 'discovery', 'done', now, now, { skipped: true });
+      const steps = await repo.getCronSteps(runId);
+      expect(steps[0].detail).toEqual({ skipped: true });
+      expect(typeof steps[0].detail).toBe('object');
     });
   });
 });

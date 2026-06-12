@@ -13,6 +13,9 @@ import type {
   CollectorStat,
   SignalSnapshot,
   CronRun,
+  CronStep,
+  CronStepName,
+  CronStepStatus,
 } from '../../domain/types.js';
 import type {
   ISignalRepo,
@@ -864,6 +867,48 @@ export class D1Repo implements ISignalRepo, IOpportunityRepo, ILeadRepo, IDiscov
       analyzed_signals: (r['analyzed_signals'] as number | null) ?? null,
       opps_updated:     (r['opps_updated'] as number | null) ?? null,
       error:            (r['error'] as string | null) ?? null,
+    }));
+  }
+
+  async upsertCronStep(
+    runId: string,
+    step: CronStepName,
+    status: CronStepStatus,
+    startedAt: string,
+    finishedAt?: string | null,
+    detail?: Record<string, unknown>,
+  ): Promise<void> {
+    await this.db
+      .prepare(`
+        INSERT INTO cron_steps (run_id, step, status, started_at, finished_at, detail_json)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT (run_id, step) DO UPDATE SET
+          status      = excluded.status,
+          finished_at = excluded.finished_at,
+          detail_json = excluded.detail_json
+      `)
+      .bind(
+        runId, step, status, startedAt,
+        finishedAt ?? null,
+        detail !== undefined ? JSON.stringify(detail) : null,
+      )
+      .run();
+  }
+
+  async getCronSteps(runId: string): Promise<CronStep[]> {
+    const { results } = await this.db
+      .prepare('SELECT * FROM cron_steps WHERE run_id = ? ORDER BY started_at ASC')
+      .bind(runId)
+      .all<Record<string, unknown>>();
+    return (results ?? []).map(r => ({
+      run_id:      r['run_id']     as string,
+      step:        r['step']       as CronStepName,
+      status:      r['status']     as CronStepStatus,
+      started_at:  r['started_at'] as string,
+      finished_at: (r['finished_at'] as string | null) ?? null,
+      detail:      r['detail_json']
+        ? JSON.parse(r['detail_json'] as string) as Record<string, unknown>
+        : null,
     }));
   }
 }
