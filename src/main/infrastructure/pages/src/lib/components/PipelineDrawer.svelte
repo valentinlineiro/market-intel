@@ -1,10 +1,37 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import type { CronRun, CollectorHealth, SourceStat } from '$lib/types.js';
+  import type { CronRun, CronStep, CollectorHealth, SourceStat } from '$lib/types.js';
 
-  export let runs:       CronRun[];
-  export let collectors: CollectorHealth[];
-  export let bySource:   SourceStat[] = [];
+  export let runs:        CronRun[];
+  export let collectors:  CollectorHealth[];
+  export let bySource:    SourceStat[] = [];
+  export let stepsByRun:  Record<string, CronStep[]> = {};
+
+  $: latestFinishedId = runs.find(r => r.finished_at)?.id ?? null;
+  let expandedRunId: string | null = null;
+  $: if (latestFinishedId && expandedRunId === null) expandedRunId = latestFinishedId;
+
+  function toggleExpand(runId: string) {
+    expandedRunId = expandedRunId === runId ? null : runId;
+  }
+
+  function stepDetail(step: CronStep): string {
+    const d = step.detail;
+    if (!d)                      return '';
+    if (d['skipped'])            return '—';
+    if (d['error'])              return String(d['error']).slice(0, 50);
+    if (d['signals']   != null)  return `${d['signals']} señales`;
+    if (d['analyzed']  != null)  return `${d['analyzed']} analizadas`;
+    if (d['candidates'] != null) return `${d['candidates']} candidatos`;
+    if (d['opps']      != null)  return `${d['opps']} opps`;
+    return '';
+  }
+
+  function stepDuration(step: CronStep): string {
+    if (!step.finished_at) return '';
+    const ms = new Date(step.finished_at).getTime() - new Date(step.started_at).getTime();
+    return ms < 1000 ? '<1s' : `${Math.round(ms / 1000)}s`;
+  }
 
   const dispatch = createEventDispatcher<{ close: void }>();
 
@@ -98,12 +125,19 @@
       {:else}
         {#each runs as run}
           {@const st = runStatus(run)}
+          {@const runSteps = stepsByRun[run.id] ?? []}
+          {@const isExpanded = expandedRunId === run.id}
           <div class="run-row" class:run-ok={st === 'ok'} class:run-err={st === 'error'} class:run-running={st === 'running'}>
             <div class="run-top">
               <span class="run-status-dot" class:ok={st === 'ok'} class:err={st === 'error'} class:spin={st === 'running'}></span>
               <span class="run-trigger">{run.trigger === 'manual' ? 'Manual' : 'Cron'}</span>
               <span class="run-age">{fmtAge(run.started_at)}</span>
               <span class="run-dur">{fmtDuration(run)}</span>
+              {#if runSteps.length > 0}
+                <button class="expand-btn" on:click={() => toggleExpand(run.id)}>
+                  {isExpanded ? '▴' : '▾'}
+                </button>
+              {/if}
             </div>
             {#if st !== 'running'}
               <div class="run-stats">
@@ -114,6 +148,18 @@
             {/if}
             {#if run.error}
               <div class="run-error">{run.error}</div>
+            {/if}
+            {#if isExpanded && runSteps.length > 0}
+              <div class="step-list">
+                {#each runSteps as step}
+                  <div class="step-item" class:step-err={step.status === 'error'}>
+                    <span class="step-dot" class:done={step.status === 'done'} class:err={step.status === 'error'}></span>
+                    <span class="step-name">{step.step}</span>
+                    <span class="step-detail">{stepDetail(step)}</span>
+                    <span class="step-dur">{stepDuration(step)}</span>
+                  </div>
+                {/each}
+              </div>
             {/if}
           </div>
         {/each}
@@ -177,4 +223,15 @@
 
   .run-stats      { display: flex; gap: 14px; font-size: 0.72rem; color: var(--text-sub); padding-left: 15px; }
   .run-error      { font-size: 0.72rem; color: #ef4444; padding-left: 15px; }
+
+  .expand-btn  { background: none; border: none; cursor: pointer; font-size: 0.7rem; color: var(--text-dim); padding: 0 2px; margin-left: 2px; }
+  .step-list   { margin-top: 5px; padding: 4px 0 2px 14px; border-left: 1px solid var(--border); display: flex; flex-direction: column; gap: 2px; }
+  .step-item   { display: flex; align-items: center; gap: 5px; font-size: 0.68rem; }
+  .step-item.step-err { color: #ef4444; }
+  .step-dot    { width: 6px; height: 6px; border-radius: 50%; background: var(--border); flex-shrink: 0; }
+  .step-dot.done { background: var(--violet); }
+  .step-dot.err  { background: #ef4444; }
+  .step-name   { color: var(--text-sub); min-width: 62px; }
+  .step-detail { color: var(--violet); }
+  .step-dur    { margin-left: auto; color: var(--text-dim); }
 </style>
