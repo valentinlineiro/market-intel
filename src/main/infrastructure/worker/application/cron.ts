@@ -6,7 +6,7 @@
  */
 
 import type { ICronRepos, ILLMProvider, INotifier, Collector } from './ports.js';
-import type { Config, CronRun } from '../domain/types.js';
+import type { Config, CronRun, Signal, CollectorStat } from '../domain/types.js';
 import { runCollect } from './collect.js';
 import { runScore } from './score.js';
 import { runDiscovery } from './discover.js';
@@ -47,32 +47,57 @@ export async function runCronJob(
   let cronError: string | undefined;
 
   try {
-    const { signals: fresh, stats } = await runCollect(repos.signals, collectors);
-    freshCount = fresh.length;
+    // ── Collect ──────────────────────────────────────────────────────────────
+    const collectStart = new Date().toISOString();
+    await repos.cronLog.upsertCronStep(runId, 'collect', 'running', collectStart).catch(() => {});
+    let fresh: Signal[];
+    let collectStats: CollectorStat[];
+    try {
+      const result = await runCollect(repos.signals, collectors);
+      fresh        = result.signals;
+      collectStats = result.stats;
+      freshCount   = fresh.length;
+      await repos.cronLog.upsertCronStep(runId, 'collect', 'done', collectStart, new Date().toISOString(), { signals: freshCount }).catch(() => {});
+    } catch (e) {
+      await repos.cronLog.upsertCronStep(runId, 'collect', 'error', collectStart, new Date().toISOString(), { error: e instanceof Error ? e.message : String(e) }).catch(() => {});
+      throw e;
+    }
 
     const runAt = new Date().toISOString();
     await Promise.all(
-      stats.map(stat =>
+      collectStats.map(stat =>
         repos.collectorHealth.upsertHealth(stat, runAt).catch(e =>
           console.error(`[cron] upsertHealth failed for ${stat.id}:`, e instanceof Error ? e.message : e),
         ),
       ),
     );
 
+    // ── Friction ─────────────────────────────────────────────────────────────
+    const frictionStart = new Date().toISOString();
     if (llm) {
+      await repos.cronLog.upsertCronStep(runId, 'friction', 'running', frictionStart).catch(() => {});
       try {
         const toAnalyze = await repos.signals.getUnanalyzed();
         await analyzeFriction(toAnalyze, llm, repos.signals, 0.85, cfg.friction?.min_strength ?? 0);
         analyzedCount = toAnalyze.length;
+        await repos.cronLog.upsertCronStep(runId, 'friction', 'done', frictionStart, new Date().toISOString(), { analyzed: analyzedCount }).catch(() => {});
       } catch (e) {
         console.error('[cron] friction analysis failed (non-fatal):', e instanceof Error ? e.message : e);
+        await repos.cronLog.upsertCronStep(runId, 'friction', 'error', frictionStart, new Date().toISOString(), { error: e instanceof Error ? e.message : String(e) }).catch(() => {});
       }
+    } else {
+      await repos.cronLog.upsertCronStep(runId, 'friction', 'done', frictionStart, new Date().toISOString(), { skipped: true }).catch(() => {});
+    }
 
+    // ── Discovery ─────────────────────────────────────────────────────────────
+    const discoveryStart = new Date().toISOString();
+    if (llm) {
+      await repos.cronLog.upsertCronStep(runId, 'discovery', 'running', discoveryStart).catch(() => {});
       try {
         const discoverTexts = fresh.map(s => s.raw_text).filter(Boolean).slice(0, 80) as string[];
         if (discoverTexts.length >= 5) {
-          const prevDiscovery = await repos.discovery.getLatestCandidates();
-          const knownSegments = [
+          const prevDiscovery  = await repos.discovery.getLatestCandidates();
+          const knownSegments  = [
             ...Object.keys(cfg.segments),
             ...(prevDiscovery?.candidates ?? []).map(c => c.segment),
           ];
@@ -81,10 +106,16 @@ export async function runCronJob(
             await repos.discovery.saveCandidates(newCandidates, crypto.randomUUID());
             console.log(`[cron] discovery done — ${newCandidates.length} candidates`);
           }
+          await repos.cronLog.upsertCronStep(runId, 'discovery', 'done', discoveryStart, new Date().toISOString(), { candidates: newCandidates.length }).catch(() => {});
+        } else {
+          await repos.cronLog.upsertCronStep(runId, 'discovery', 'done', discoveryStart, new Date().toISOString(), { skipped: true }).catch(() => {});
         }
       } catch (e) {
         console.error('[cron] discovery failed (non-fatal):', e instanceof Error ? e.message : e);
+        await repos.cronLog.upsertCronStep(runId, 'discovery', 'error', discoveryStart, new Date().toISOString(), { error: e instanceof Error ? e.message : String(e) }).catch(() => {});
       }
+    } else {
+      await repos.cronLog.upsertCronStep(runId, 'discovery', 'done', discoveryStart, new Date().toISOString(), { skipped: true }).catch(() => {});
     }
 
     if (!(await repos.discovery.hasCandidates())) {
@@ -94,19 +125,38 @@ export async function runCronJob(
       );
     }
 
-    const scoreResults = await runScore(
-      { signals: repos.signals, opportunities: repos.opportunities, discovery: repos.discovery },
-      notifier,
-      cfg.score.top_n,
-      cfg.score.min_score,
-      cfg.score.dry_run,
-      llm,
-    );
-    oppsUpdated = scoreResults.length;
+    // ── Score ────────────────────────────────────────────────────────────────
+    const scoreStart = new Date().toISOString();
+    await repos.cronLog.upsertCronStep(runId, 'score', 'running', scoreStart).catch(() => {});
+    try {
+      const scoreResults = await runScore(
+        { signals: repos.signals, opportunities: repos.opportunities, discovery: repos.discovery },
+        notifier,
+        cfg.score.top_n,
+        cfg.score.min_score,
+        cfg.score.dry_run,
+        llm,
+      );
+      oppsUpdated = scoreResults.length;
+      await repos.cronLog.upsertCronStep(runId, 'score', 'done', scoreStart, new Date().toISOString(), { opps: oppsUpdated }).catch(() => {});
+    } catch (e) {
+      await repos.cronLog.upsertCronStep(runId, 'score', 'error', scoreStart, new Date().toISOString(), { error: e instanceof Error ? e.message : String(e) }).catch(() => {});
+      throw e;
+    }
 
-    await runSnapshot(repos.signals, repos.snapshots);
-    await runGapScore(repos.snapshots, repos.opportunities);
-    console.log('[cron] gap snapshot + scoring done');
+    // ── Snapshot ─────────────────────────────────────────────────────────────
+    const snapshotStart = new Date().toISOString();
+    await repos.cronLog.upsertCronStep(runId, 'snapshot', 'running', snapshotStart).catch(() => {});
+    try {
+      await runSnapshot(repos.signals, repos.snapshots);
+      await runGapScore(repos.snapshots, repos.opportunities);
+      console.log('[cron] gap snapshot + scoring done');
+      await repos.cronLog.upsertCronStep(runId, 'snapshot', 'done', snapshotStart, new Date().toISOString(), {}).catch(() => {});
+    } catch (e) {
+      await repos.cronLog.upsertCronStep(runId, 'snapshot', 'error', snapshotStart, new Date().toISOString(), { error: e instanceof Error ? e.message : String(e) }).catch(() => {});
+      throw e;
+    }
+
   } catch (e) {
     cronError = e instanceof Error ? e.message : String(e);
     console.error('[cron] fatal error:', cronError);
