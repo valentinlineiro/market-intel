@@ -12,6 +12,7 @@ import { buildRegistry } from '../infrastructure/collectors/registry.js';
 import { getConfig } from '../infrastructure/config.js';
 import { runCronJob } from '../application/cron.js';
 import type { ICronRepos } from '../application/ports.js';
+import type { CronStep } from '../domain/types.js';
 import { json, makeLlm, hasLlmKey, authCors, PUBLIC_CORS } from '../index.js';
 import type { Env } from '../index.js';
 
@@ -103,14 +104,21 @@ export async function handleGetPipelineStatus(db: D1Database, cors = PUBLIC_CORS
     repo.getCollectorHealth().catch(() => [] as Array<{ collector_id: string; last_run_at: string; signal_count: number; error: string | null }>),
     repo.getSignalsBySource().catch(() => [] as Array<{ source: string; total: number; avg_strength: number; analyzed: number }>),
   ]);
-  return json({ runs, collectors, bySource }, 200, cors);
+  const stepsPerRun = await Promise.all(
+    runs.map(r => repo.getCronSteps(r.id).catch(() => [] as CronStep[])),
+  );
+  const stepsByRun: Record<string, CronStep[]> = Object.fromEntries(
+    runs.map((r, i) => [r.id, stepsPerRun[i]]),
+  );
+  return json({ runs, collectors, bySource, stepsByRun }, 200, cors);
 }
 
 export async function handleGetPipelineStatusById(db: D1Database, runId: string, cors = PUBLIC_CORS): Promise<Response> {
-  const repo = new D1Repo(db);
-  const runs = await repo.getRecentCronRuns(20).catch(() => [] as import('../domain/types.js').CronRun[]);
-  const run  = runs.find(r => r.id === runId) ?? null;
-  return json({ run }, 200, cors);
+  const repo  = new D1Repo(db);
+  const runs  = await repo.getRecentCronRuns(20).catch(() => [] as import('../domain/types.js').CronRun[]);
+  const run   = runs.find(r => r.id === runId) ?? null;
+  const steps = run ? await repo.getCronSteps(runId).catch(() => [] as CronStep[]) : [];
+  return json({ run, steps }, 200, cors);
 }
 
 export async function handleGetStats(d1repo: D1Repo): Promise<Response> {
