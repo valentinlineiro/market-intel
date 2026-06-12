@@ -32,13 +32,7 @@ Three focused changes. No new DB tables or migrations.
 
 **Processing steps:**
 
-1. **Slug derivation** — normalise profile to a config key:
-   ```
-   profile.toLowerCase()
-     .normalize('NFD').replace(/\p{Mn}/gu, '')  // strip accents
-     .replace(/[^a-z0-9]+/g, '_')
-     .replace(/^_|_$/g, '')
-   ```
+1. **Slug derivation** — export `profileToSlug` from `d1-repo.ts` (already defined there, line 32) and call it here. Single source of truth for slug logic across worker and DB layer.
 
 2. **Duplicate check** — load current config; if `cfg.segments[slug]` already exists, return `{ ok: false, error: 'already_active' }` (HTTP 409).
 
@@ -88,8 +82,34 @@ Steps:
 3. Build a minimal focused config: `{ ...cfg, segments: { [segmentKey]: seg } }`.
 4. Insert a `cron_runs` row with `trigger: 'manual'` and a fresh `run_id`.
 5. Call `buildRegistry(focusedCfg, env, [])` — only this segment's collectors fire.
-6. Call `runCollect`, `analyzeFriction` (for the fresh signals), skip scoring and discovery steps — those are full-pipeline concerns.
-7. Update the `cron_runs` row with `finished_at`, `fresh_signals`, `analyzed_signals`.
+6. Call `runCollect`, `analyzeFriction` (for the fresh signals).
+7. Run scoring for this segment via `runScore`, passing a mock discovery repo that returns only the promoted segment:
+   ```typescript
+   await runScore(
+     {
+       signals: d1repo,
+       opportunities: d1repo,
+       discovery: {
+         ...d1repo,
+         getSegmentsToScore: async () => [{
+           key:             segmentKey,
+           label:           seg.label,
+           keywords:        seg.keywords,
+           income_tier:     seg.income_tier,
+           has_deadline:    seg.has_deadline,
+           discovery_score: 5,
+         }],
+       },
+     },
+     notifier,
+     1,     // topN — score this one segment
+     0,     // minScore — always create the opportunity row
+     false, // dryRun
+     hasLlmKey(env) ? llm : undefined,
+   );
+   ```
+   Without this, no `Opportunity` row exists for the new segment until the next cron (up to 12 h), leaving the Oportunidades tab empty immediately after promote.
+8. Update the `cron_runs` row with `finished_at`, `fresh_signals`, `analyzed_signals`, `opps_updated`.
 
 If the segment is missing from config by the time this runs (race condition), exit cleanly.
 
@@ -103,15 +123,18 @@ export let activeSegments: Record<string, unknown> = {};
 ```
 Passed from `+page.svelte` as `activeSegments={data.config?.segments ?? {}}`.
 
-**Slug derivation** (mirrors server, client-side for pre-existing check):
+**Slug derivation** — must exactly mirror `profileToSlug` in `d1-repo.ts`, including the `.slice(0, 48)` cap. Export `profileToSlug` from `d1-repo.ts` and import it in both `index.ts` (promote handler) and duplicate it verbatim client-side in `SectorsGrid.svelte`:
 ```typescript
 function toSlug(profile: string): string {
-  return profile.toLowerCase()
-    .normalize('NFD').replace(/\p{Mn}/gu, '')
+  return profile
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
     .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_|_$/g, '');
+    .replace(/^_|_$/g, '')
+    .slice(0, 48);
 }
 ```
+Any divergence here would cause `activeSegments[slug]` to miss already-promoted cards.
 
 **State machine:**
 ```typescript
