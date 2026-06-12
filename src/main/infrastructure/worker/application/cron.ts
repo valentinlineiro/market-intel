@@ -192,43 +192,71 @@ export async function runFocusedSync(
   let cronError: string | undefined;
 
   try {
-    const { signals: fresh } = await runCollect(repos.signals, collectors);
-    freshCount = fresh.length;
+    // ── Collect ──────────────────────────────────────────────────────────────
+    const collectStart = new Date().toISOString();
+    await repos.cronLog.upsertCronStep(runId, 'collect', 'running', collectStart).catch(() => {});
+    let fresh: Signal[];
+    try {
+      const result = await runCollect(repos.signals, collectors);
+      fresh      = result.signals;
+      freshCount = fresh.length;
+      await repos.cronLog.upsertCronStep(runId, 'collect', 'done', collectStart, new Date().toISOString(), { signals: freshCount }).catch(() => {});
+    } catch (e) {
+      await repos.cronLog.upsertCronStep(runId, 'collect', 'error', collectStart, new Date().toISOString(), { error: e instanceof Error ? e.message : String(e) }).catch(() => {});
+      throw e;
+    }
 
+    // ── Friction ─────────────────────────────────────────────────────────────
+    const frictionStart = new Date().toISOString();
     if (fresh.length && llm) {
+      await repos.cronLog.upsertCronStep(runId, 'friction', 'running', frictionStart).catch(() => {});
       try {
         await analyzeFriction(fresh, llm, repos.signals, 0.85, 0);
         analyzedCount = fresh.length;
+        await repos.cronLog.upsertCronStep(runId, 'friction', 'done', frictionStart, new Date().toISOString(), { analyzed: analyzedCount }).catch(() => {});
       } catch (e) {
         console.error('[focused-sync] friction failed (non-fatal):', e instanceof Error ? e.message : e);
+        await repos.cronLog.upsertCronStep(runId, 'friction', 'error', frictionStart, new Date().toISOString(), { error: e instanceof Error ? e.message : String(e) }).catch(() => {});
       }
+    } else {
+      await repos.cronLog.upsertCronStep(runId, 'friction', 'done', frictionStart, new Date().toISOString(), { skipped: true }).catch(() => {});
     }
 
-    const scoreResults = await runScore(
-      {
-        signals:       repos.signals,
-        opportunities: repos.opportunities,
-        discovery: {
-          saveCandidates:      (candidates, id) => repos.discovery.saveCandidates(candidates, id),
-          getLatestCandidates: () => repos.discovery.getLatestCandidates(),
-          hasCandidates:       () => repos.discovery.hasCandidates(),
-          getSegmentsToScore:  async () => [{
-            key:             segmentKey,
-            label:           segmentLabel,
-            keywords:        segmentKeywords,
-            income_tier:     incomeTier,
-            has_deadline:    hasDeadline,
-            discovery_score: 5,
-          }],
+    // ── Score ────────────────────────────────────────────────────────────────
+    const scoreStart = new Date().toISOString();
+    await repos.cronLog.upsertCronStep(runId, 'score', 'running', scoreStart).catch(() => {});
+    try {
+      const scoreResults = await runScore(
+        {
+          signals:       repos.signals,
+          opportunities: repos.opportunities,
+          discovery: {
+            saveCandidates:      (candidates, id) => repos.discovery.saveCandidates(candidates, id),
+            getLatestCandidates: () => repos.discovery.getLatestCandidates(),
+            hasCandidates:       () => repos.discovery.hasCandidates(),
+            getSegmentsToScore:  async () => [{
+              key:             segmentKey,
+              label:           segmentLabel,
+              keywords:        segmentKeywords,
+              income_tier:     incomeTier,
+              has_deadline:    hasDeadline,
+              discovery_score: 5,
+            }],
+          },
         },
-      },
-      notifier,
-      1,
-      0,
-      false,
-      llm,
-    );
-    oppsUpdated = scoreResults.length;
+        notifier,
+        1,
+        0,
+        false,
+        llm,
+      );
+      oppsUpdated = scoreResults.length;
+      await repos.cronLog.upsertCronStep(runId, 'score', 'done', scoreStart, new Date().toISOString(), { opps: oppsUpdated }).catch(() => {});
+    } catch (e) {
+      await repos.cronLog.upsertCronStep(runId, 'score', 'error', scoreStart, new Date().toISOString(), { error: e instanceof Error ? e.message : String(e) }).catch(() => {});
+      throw e;
+    }
+
   } catch (e) {
     cronError = e instanceof Error ? e.message : String(e);
     console.error('[focused-sync] error:', cronError);
