@@ -19,6 +19,18 @@ export interface CronRun {
   error:            string | null;
 }
 
+export type CronStepName   = 'collect' | 'friction' | 'discovery' | 'score' | 'snapshot';
+export type CronStepStatus = 'running' | 'done' | 'error';
+
+export interface CronStep {
+  run_id:      string;
+  step:        CronStepName;
+  status:      CronStepStatus;
+  started_at:  string;
+  finished_at: string | null;
+  detail:      Record<string, unknown> | null;
+}
+
 export type OpportunityStatus = 'watching' | 'testing' | 'scaling' | 'killed';
 
 export interface ScoreBreakdown {
