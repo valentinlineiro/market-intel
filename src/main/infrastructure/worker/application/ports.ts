@@ -1,6 +1,6 @@
 import type { Signal, Opportunity, Lead, DiscoveryCandidate, SegmentConfig,
   GnewsSegmentConfig, MarketTest, MarketTestResult, FrictionProfile,
-  CollectorStat, SignalSnapshot, CronRun } from '../domain/types.js';
+  CollectorStat, SignalSnapshot, CronRun, CronStep, CronStepName, CronStepStatus } from '../domain/types.js';
 
 export interface ISignalRepo {
   save(signal: Signal): Promise<boolean>;
@@ -75,6 +75,15 @@ export interface ICronLogRepo {
   insertCronRun(run: CronRun): Promise<void>;
   finishCronRun(id: string, fields: { fresh_signals: number; analyzed_signals: number; opps_updated: number; error?: string }): Promise<void>;
   getRecentCronRuns(limit?: number): Promise<CronRun[]>;
+  upsertCronStep(
+    runId: string,
+    step: CronStepName,
+    status: CronStepStatus,
+    startedAt: string,
+    finishedAt?: string | null,
+    detail?: Record<string, unknown>,
+  ): Promise<void>;
+  getCronSteps(runId: string): Promise<CronStep[]>;
 }
 
 export interface ICronRepos {
