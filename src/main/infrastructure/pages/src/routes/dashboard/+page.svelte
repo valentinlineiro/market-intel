@@ -281,7 +281,15 @@
       {/if}
       {#if data.discovery.candidates.length > 0}
         <div class="section-label">Segmentos detectados</div>
-        <SectorsGrid discovery={data.discovery} />
+        <SectorsGrid
+          discovery={data.discovery}
+          activeSegments={data.config?.segments ?? {}}
+          on:promoted={({ detail }) => {
+            syncRunId = detail.run_id;
+            syncRunning = true;
+            pollSync();
+          }}
+        />
         <div class="section-sep"></div>
       {/if}
       <div class="section-label">Señales</div>
