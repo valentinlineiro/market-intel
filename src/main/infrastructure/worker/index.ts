@@ -664,6 +664,8 @@ const handleFetch: ExportedHandler<Env>['fetch'] = async (request, env, ctx) => 
       invalidateCache();
 
       const runId = crypto.randomUUID();
+      const d1repoForRun = new D1Repo(env.DB);
+      await d1repoForRun.insertCronRun({ id: runId, started_at: new Date().toISOString(), finished_at: null, trigger: 'manual', fresh_signals: null, analyzed_signals: null, opps_updated: null, error: null });
       ctx.waitUntil(runFocusedSync(env, slug, runId));
 
       return ajson({ ok: true, segment: slug, run_id: runId });
@@ -795,17 +797,6 @@ async function runFocusedSync(env: Env, segmentKey: string, runId: string): Prom
   const d1repo = new D1Repo(env.DB);
   const llm = makeLlm(cfg.llm, env);
   const notifier = new EmailNotifier(env.EMAIL, cfg.notifications);
-
-  await d1repo.insertCronRun({
-    id: runId,
-    started_at: new Date().toISOString(),
-    finished_at: null,
-    trigger: 'manual',
-    fresh_signals: null,
-    analyzed_signals: null,
-    opps_updated: null,
-    error: null,
-  });
 
   let freshCount = 0;
   let analyzedCount = 0;
