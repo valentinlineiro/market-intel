@@ -59,30 +59,32 @@ export async function runCronJob(
       ),
     );
 
-    try {
-      const toAnalyze = await repos.signals.getUnanalyzed();
-      await analyzeFriction(toAnalyze, llm!, repos.signals, 0.85, cfg.friction?.min_strength ?? 0);
-      analyzedCount = toAnalyze.length;
-    } catch (e) {
-      console.error('[cron] friction analysis failed (non-fatal):', e instanceof Error ? e.message : e);
-    }
-
-    try {
-      const discoverTexts = fresh.map(s => s.raw_text).filter(Boolean).slice(0, 80) as string[];
-      if (discoverTexts.length >= 5) {
-        const prevDiscovery = await repos.discovery.getLatestCandidates();
-        const knownSegments = [
-          ...Object.keys(cfg.segments),
-          ...(prevDiscovery?.candidates ?? []).map(c => c.segment),
-        ];
-        const newCandidates = await runDiscovery(llm!, notifier, cfg.discover, discoverTexts, knownSegments);
-        if (newCandidates.length) {
-          await repos.discovery.saveCandidates(newCandidates, crypto.randomUUID());
-          console.log(`[cron] discovery done — ${newCandidates.length} candidates`);
-        }
+    if (llm) {
+      try {
+        const toAnalyze = await repos.signals.getUnanalyzed();
+        await analyzeFriction(toAnalyze, llm, repos.signals, 0.85, cfg.friction?.min_strength ?? 0);
+        analyzedCount = toAnalyze.length;
+      } catch (e) {
+        console.error('[cron] friction analysis failed (non-fatal):', e instanceof Error ? e.message : e);
       }
-    } catch (e) {
-      console.error('[cron] discovery failed (non-fatal):', e instanceof Error ? e.message : e);
+
+      try {
+        const discoverTexts = fresh.map(s => s.raw_text).filter(Boolean).slice(0, 80) as string[];
+        if (discoverTexts.length >= 5) {
+          const prevDiscovery = await repos.discovery.getLatestCandidates();
+          const knownSegments = [
+            ...Object.keys(cfg.segments),
+            ...(prevDiscovery?.candidates ?? []).map(c => c.segment),
+          ];
+          const newCandidates = await runDiscovery(llm, notifier, cfg.discover, discoverTexts, knownSegments);
+          if (newCandidates.length) {
+            await repos.discovery.saveCandidates(newCandidates, crypto.randomUUID());
+            console.log(`[cron] discovery done — ${newCandidates.length} candidates`);
+          }
+        }
+      } catch (e) {
+        console.error('[cron] discovery failed (non-fatal):', e instanceof Error ? e.message : e);
+      }
     }
 
     if (!(await repos.discovery.hasCandidates())) {
