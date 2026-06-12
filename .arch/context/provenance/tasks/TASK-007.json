@@ -1,13 +1,29 @@
 {
-  "commitCount": 2,
+  "commitCount": 4,
   "commitRefOverflow": false,
-  "lastCommitDate": "2026-06-09T10:25:26+02:00",
+  "lastCommitDate": "2026-06-09T12:08:49+02:00",
   "recentCommitRefs": [
     "3e21e55",
-    "b9c1f8a"
+    "81a60d0",
+    "b9c1f8a",
+    "f48eb1b"
   ],
   "touchedFrequency": {
+    ".arch/chronicle.jsonl": 1,
+    ".arch/context/provenance/tasks/TASK-004.json": 1,
+    ".arch/context/provenance/tasks/TASK-006.json": 1,
+    ".arch/context/provenance/tasks/TASK-007.json": 1,
+    ".arch/context/provenance/tasks/TASK-008.json": 1,
+    ".arch/context/provenance/tasks/TASK-009.json": 1,
+    ".arch/context/provenance/tasks/TASK-010.json": 1,
+    ".arch/context/trace-log.jsonl": 1,
     ".arch/focus-ledger.jsonl": 1,
-    "docs/tasks/TASK-007.md": 2
+    ".arch/reflect-breach-log.jsonl": 1,
+    "docs/EVENTS.md": 1,
+    "docs/archive/TASK-007.md": 1,
+    "docs/tasks/TASK-007.md": 3,
+    "src/main/infrastructure/worker/domain/types.ts": 1,
+    "src/main/infrastructure/worker/index.ts": 1,
+    "src/main/infrastructure/worker/infrastructure/db/d1-repo.ts": 1
   }
 }

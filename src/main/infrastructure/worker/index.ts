@@ -809,6 +809,7 @@ async function runFocusedSync(env: Env, segmentKey: string, runId: string): Prom
 
   let freshCount = 0;
   let analyzedCount = 0;
+  let oppsUpdated = 0;
   let cronError: string | undefined;
 
   try {
@@ -826,7 +827,7 @@ async function runFocusedSync(env: Env, segmentKey: string, runId: string): Prom
       }
     }
 
-    await runScore(
+    const scoreResults = await runScore(
       {
         signals: d1repo,
         opportunities: d1repo,
@@ -849,6 +850,7 @@ async function runFocusedSync(env: Env, segmentKey: string, runId: string): Prom
       false,
       hasLlmKey(env) ? llm : undefined,
     );
+    oppsUpdated = scoreResults.length;
   } catch (e) {
     cronError = e instanceof Error ? e.message : String(e);
     console.error('[focused-sync] error:', cronError);
@@ -857,7 +859,7 @@ async function runFocusedSync(env: Env, segmentKey: string, runId: string): Prom
   await d1repo.finishCronRun(runId, {
     fresh_signals: freshCount,
     analyzed_signals: analyzedCount,
-    opps_updated: 1,
+    opps_updated: oppsUpdated,
     error: cronError,
   });
 }

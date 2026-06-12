@@ -1,12 +1,17 @@
 {
-  "commitCount": 1,
+  "commitCount": 2,
   "commitRefOverflow": false,
-  "lastCommitDate": "2026-06-06T18:05:37+00:00",
+  "lastCommitDate": "2026-06-09T12:08:37+02:00",
   "recentCommitRefs": [
-    "44c271a"
+    "44c271a",
+    "f48eb1b"
   ],
   "touchedFrequency": {
+    ".arch/chronicle.jsonl": 1,
     ".arch/focus-ledger.jsonl": 1,
-    "docs/tasks/TASK-002.md": 1
+    "docs/EVENTS.md": 1,
+    "docs/archive/TASK-007.md": 1,
+    "docs/tasks/TASK-002.md": 1,
+    "docs/tasks/TASK-007.md": 1
   }
 }

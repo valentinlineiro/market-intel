@@ -1,0 +1,11 @@
+{
+  "commitCount": 1,
+  "commitRefOverflow": false,
+  "lastCommitDate": "2026-06-11T16:21:33+02:00",
+  "recentCommitRefs": [
+    "4e2f93b"
+  ],
+  "touchedFrequency": {
+    "docs/tasks/TASK-012.md": 1
+  }
+}
