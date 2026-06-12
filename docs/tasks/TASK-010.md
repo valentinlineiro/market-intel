@@ -1,4 +1,4 @@
-## TASK-010: Retroactive task capture — src/main/infrastructure/worker/application/market-test.ts modified 3 times without governance
+## TASK-010: Retroactive task capture - src/main/infrastructure/worker/application/market-test.ts modified 3 times without governance
 **Meta:** P3 | S | READY | Focus:no | 2-code-generation | local | docs/
 **Depends:** none
 

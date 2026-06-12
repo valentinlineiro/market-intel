@@ -27,3 +27,7 @@ capture dashboard UI sprint: StatsBar, OpportunityList, SectorsGrid, TagInput, C
 **Constraint:** Retroactive Hanseis lack the implementation context of real-time retrospectives. The deviation analysis here is inferred, not observed.
 **Cost:** None — work was already done.
 **Forward Action:** Add [TASK-ID] to commits going forward. Consider arch task start before UI sprints even when moving fast — the overhead is one command.
+
+## Approval
+**Decision:** Approved
+

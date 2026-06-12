@@ -1,4 +1,4 @@
-## TASK-009: Retroactive task capture — src/main/infrastructure/worker/infrastructure/db/d1-repo.ts modified 4 times without governance
+## TASK-009: Retroactive task capture - src/main/infrastructure/worker/infrastructure/db/d1-repo.ts modified 4 times without governance
 **Meta:** P3 | S | READY | Focus:no | 2-code-generation | local | docs/
 **Depends:** none
 

@@ -58,3 +58,7 @@ discovery_candidates D1 table not yet in schema.sql. Worker index.ts missing the
 **Constraint:** The plan was already partially executed without governance. ARCH adoption captures the existing state, not missing work.
 **Cost:** None — no new code written.
 **Forward Action:** Validate the full pipeline end-to-end: run POST /discover and verify SectorsGrid renders the results in the dashboard.
+
+## Approval
+**Decision:** Approved
+

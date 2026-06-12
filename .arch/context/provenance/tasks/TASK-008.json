@@ -1,14 +1,16 @@
 {
-  "commitCount": 3,
+  "commitCount": 5,
   "commitRefOverflow": false,
-  "lastCommitDate": "2026-06-11T16:21:34+02:00",
+  "lastCommitDate": "2026-06-12T11:24:08+02:00",
   "recentCommitRefs": [
     "2ad3039",
+    "3faf33f",
+    "b43ee17",
     "d778539",
     "e3a4c91"
   ],
   "touchedFrequency": {
-    ".arch/focus-ledger.jsonl": 2,
+    ".arch/focus-ledger.jsonl": 4,
     "docs/tasks/TASK-008.md": 2
   }
 }

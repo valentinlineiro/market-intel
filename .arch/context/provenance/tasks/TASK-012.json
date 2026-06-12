@@ -1,11 +1,15 @@
 {
-  "commitCount": 1,
+  "commitCount": 2,
   "commitRefOverflow": false,
-  "lastCommitDate": "2026-06-11T16:21:33+02:00",
+  "lastCommitDate": "2026-06-11T16:23:21+02:00",
   "recentCommitRefs": [
-    "4e2f93b"
+    "4e2f93b",
+    "7b87f8f"
   ],
   "touchedFrequency": {
+    ".arch/chronicle.jsonl": 1,
+    "docs/EVENTS.md": 1,
+    "docs/archive/TASK-012.md": 1,
     "docs/tasks/TASK-012.md": 1
   }
 }
