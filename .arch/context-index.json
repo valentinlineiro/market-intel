@@ -1,7 +1,7 @@
 {
   "adrTaskLinks": {},
   "adrs": {},
-  "builtAt": "2026-06-11T14:21:34.477Z",
+  "builtAt": "2026-06-12T09:23:35.087Z",
   "failures": {},
   "files": {},
   "guidelineFailureLinks": {},
@@ -88,24 +88,26 @@
       }
     },
     "TASK-004": {
-      "commitCount": 4,
+      "commitCount": 5,
       "commitRefOverflow": false,
-      "lastCommitDate": "2026-06-08T19:25:05+00:00",
+      "lastCommitDate": "2026-06-12T09:38:42+02:00",
       "recentCommitRefs": [
         "5b62c94",
+        "750f0c6",
         "b4f942d",
         "bee4c4b",
         "e142b9b"
       ],
       "touchedFrequency": {
-        ".arch/causal-signal.jsonl": 1,
-        ".arch/chronicle.jsonl": 1,
+        ".arch/causal-signal.jsonl": 2,
+        ".arch/chronicle.jsonl": 2,
         ".arch/context/provenance/tasks/TASK-003.json": 1,
         ".arch/context/provenance/tasks/TASK-004.json": 1,
         ".arch/context/provenance/tasks/TASK-006.json": 1,
         ".arch/focus-ledger.jsonl": 1,
         ".arch/reflect-breach-log.jsonl": 1,
-        "docs/EVENTS.md": 1,
+        ".arch/temporal-index.jsonl": 1,
+        "docs/EVENTS.md": 2,
         "docs/MISSION.md": 1,
         "docs/archive/TASK-004.md": 1,
         "docs/refinement/IDEA-scan-forward-action-task-002.md": 1,
@@ -180,16 +182,17 @@
       }
     },
     "TASK-008": {
-      "commitCount": 3,
+      "commitCount": 4,
       "commitRefOverflow": false,
-      "lastCommitDate": "2026-06-11T16:21:34+02:00",
+      "lastCommitDate": "2026-06-12T11:23:34+02:00",
       "recentCommitRefs": [
         "2ad3039",
+        "b43ee17",
         "d778539",
         "e3a4c91"
       ],
       "touchedFrequency": {
-        ".arch/focus-ledger.jsonl": 2,
+        ".arch/focus-ledger.jsonl": 3,
         "docs/tasks/TASK-008.md": 2
       }
     },
@@ -231,13 +234,17 @@
       }
     },
     "TASK-012": {
-      "commitCount": 1,
+      "commitCount": 2,
       "commitRefOverflow": false,
-      "lastCommitDate": "2026-06-11T16:21:33+02:00",
+      "lastCommitDate": "2026-06-11T16:23:21+02:00",
       "recentCommitRefs": [
-        "4e2f93b"
+        "4e2f93b",
+        "7b87f8f"
       ],
       "touchedFrequency": {
+        ".arch/chronicle.jsonl": 1,
+        "docs/EVENTS.md": 1,
+        "docs/archive/TASK-012.md": 1,
         "docs/tasks/TASK-012.md": 1
       }
     }
