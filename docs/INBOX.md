@@ -17,3 +17,14 @@ AWAITING_PROMOTION | IDEA-scan-forward-action-task-005 | 2026-06-09 (missing: ca
 AWAITING_PROMOTION | IDEA-scan-ungoverned-src-main-infrastructure-worker-applicati | 2026-06-09 (missing: candidate-class) — no Decision field set
 AWAITING_PROMOTION | IDEA-scan-ungoverned-src-main-infrastructure-worker-index-ts | 2026-06-09 (missing: candidate-class) — no Decision field set
 AWAITING_PROMOTION | IDEA-scan-ungoverned-src-main-infrastructure-worker-infrastru | 2026-06-09 (missing: candidate-class) — no Decision field set
+
+## [AWAITING_REVIEW] TASK-004 [L3-AUTO]
+**Closed:** 2026-06-12T07:38:42.930Z
+**Title:** improve scoring: embedding clustering to replace flat LLM scoring
+
+| AC | Type | Pass | Detail |
+|---|---|---|---|
+| Signals with semantic similarity > 0.85 are grouped into clu | prose | ✔ | prose: human-verified (non-automated) |
+| Cluster score aggregates friction analysis across all signal | prose | ✔ | prose: human-verified (non-automated) |
+| LLM call count per govern run reduced vs current flat scorin | prose | ✔ | prose: human-verified (non-automated) |
+| npm test passes | cmd | ✔ | exit 0 (expected 0) |

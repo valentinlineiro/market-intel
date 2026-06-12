@@ -1,5 +1,5 @@
 import { env } from 'cloudflare:workers';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, beforeAll } from 'vitest';
 import { D1Repo } from '../../infrastructure/db/d1-repo.js';
 import type { Signal, Opportunity, DiscoveryCandidate, SignalSnapshot } from '../../domain/types.js';
 
@@ -49,27 +49,71 @@ function makeOpportunity(overrides: Partial<Opportunity> = {}): Opportunity {
   };
 }
 
-// ---------------------------------------------------------------------------
-// Schema setup — apply all migrations before each test
-// ---------------------------------------------------------------------------
+declare const __DB_MIGRATIONS__: string[];
+
+function splitSqlStatements(sql: string): string[] {
+  const statements: string[] = [];
+  let current = '';
+  let inString = false;
+  let stringChar = '';
+
+  // Clean up single-line comments (-- comment)
+  const lines = sql.split('\n').map((line) => {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('--')) {
+      return '';
+    }
+    return line;
+  });
+
+  const cleanSql = lines.join('\n');
+
+  for (let i = 0; i < cleanSql.length; i++) {
+    const char = cleanSql[i]!;
+    const nextChar = cleanSql[i + 1];
+
+    if (inString) {
+      current += char;
+      if (char === stringChar) {
+        if (nextChar === stringChar) {
+          current += nextChar;
+          i++; // Skip the escaped quote
+        } else {
+          inString = false;
+        }
+      }
+    } else {
+      if (char === "'" || char === '"') {
+        inString = true;
+        stringChar = char;
+        current += char;
+      } else if (char === ';') {
+        current = current.trim();
+        if (current) {
+          statements.push(current);
+        }
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+  }
+  current = current.trim();
+  if (current) {
+    statements.push(current);
+  }
+  return statements;
+}
 
 async function applyMigrations(db: D1Database): Promise<void> {
-  // Use prepare().run() for DDL — exec() requires a trailing semicolon in some miniflare versions
-  const ddl: string[] = [
-    `CREATE TABLE IF NOT EXISTS signals (id TEXT PRIMARY KEY, source TEXT NOT NULL, collected_at TEXT NOT NULL, segment TEXT NOT NULL, location TEXT, raw_text TEXT, url TEXT, pain_keywords TEXT, sentiment_score REAL, salary_mean INTEGER, income_tier TEXT, signal_strength REAL, has_deadline INTEGER DEFAULT 0)`,
-    `CREATE UNIQUE INDEX IF NOT EXISTS idx_signals_url_seg ON signals(url, segment)`,
-    `CREATE TABLE IF NOT EXISTS opportunities (id TEXT PRIMARY KEY, segment TEXT NOT NULL, pain_summary TEXT, score REAL, score_breakdown TEXT, signal_ids TEXT, signal_count INTEGER DEFAULT 0, first_seen TEXT, last_updated TEXT, status TEXT DEFAULT 'watching', landing_url TEXT, emails_captured INTEGER DEFAULT 0, validation_deadline TEXT, alerted_at TEXT, gap_score REAL)`,
-    `CREATE TABLE IF NOT EXISTS leads (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT NOT NULL, segment TEXT NOT NULL, captured_at TEXT NOT NULL, ip TEXT, ua TEXT, price_tier TEXT, UNIQUE(email, segment))`,
-    `CREATE TABLE IF NOT EXISTS landing_pages (segment TEXT NOT NULL, page_slug TEXT NOT NULL DEFAULT 'index', html TEXT NOT NULL, copy TEXT, title TEXT, deployed_at TEXT NOT NULL, PRIMARY KEY (segment, page_slug))`,
-    `CREATE TABLE IF NOT EXISTS discovery_candidates (id INTEGER PRIMARY KEY AUTOINCREMENT, profile TEXT NOT NULL, pain TEXT NOT NULL, keywords TEXT NOT NULL, source_urls TEXT NOT NULL DEFAULT '[]', post_count INTEGER DEFAULT 0, discovery_score REAL DEFAULT 0, income_est TEXT, has_deadline INTEGER DEFAULT 0, source TEXT DEFAULT 'reddit', run_id TEXT NOT NULL, discovered_at TEXT NOT NULL)`,
-    `CREATE TABLE IF NOT EXISTS market_tests (id TEXT PRIMARY KEY, description TEXT NOT NULL, generated_config TEXT, status TEXT NOT NULL DEFAULT 'pending', result TEXT, error TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
-    `CREATE TABLE IF NOT EXISTS signal_snapshots (segment TEXT NOT NULL, week TEXT NOT NULL, count INTEGER NOT NULL, avg_pain REAL NOT NULL, solution_ratio REAL NOT NULL DEFAULT 0, PRIMARY KEY (segment, week))`,
-  ];
-
-  for (const stmt of ddl) {
-    await db.prepare(stmt).run();
+  for (const sql of __DB_MIGRATIONS__) {
+    const statements = splitSqlStatements(sql);
+    for (const stmt of statements) {
+      await db.prepare(stmt).run();
+    }
   }
 }
+
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -78,10 +122,25 @@ async function applyMigrations(db: D1Database): Promise<void> {
 describe('D1Repo', () => {
   let repo: D1Repo;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     await applyMigrations(env.DB);
+  });
+
+  beforeEach(async () => {
     // Clear tables before each test to ensure isolation
-    for (const table of ['signals', 'opportunities', 'leads', 'landing_pages', 'discovery_candidates', 'market_tests', 'signal_snapshots']) {
+    const tables = [
+      'signals',
+      'opportunities',
+      'leads',
+      'landing_pages',
+      'discovery_candidates',
+      'market_tests',
+      'signal_snapshots',
+      'config',
+      'collector_health',
+      'cron_log',
+    ];
+    for (const table of tables) {
       await env.DB.exec(`DELETE FROM ${table}`);
     }
     repo = new D1Repo(env.DB);
@@ -264,7 +323,7 @@ describe('D1Repo', () => {
       expect(result).not.toBeNull();
       expect(result!.candidates).toHaveLength(2);
       // Results ordered by discovery_score DESC
-      expect(result!.candidates[0]!.segment).toBe('fisioterapeuta_aut_nomo');
+      expect(result!.candidates[0]!.segment).toBe('fisioterapeuta_autonomo');
       expect(result!.candidates[0]!.label).toBe('Fisioterapeuta autónomo');
       expect(result!.candidates[0]!.pain_summary).toBe('Burocracia con seguros médicos');
       expect(result!.discovered_at).toBeTruthy();
@@ -389,22 +448,12 @@ describe('D1Repo', () => {
       expect(stats.leads).toBe(1);
     });
   });
-});
 
-// ---------------------------------------------------------------------------
-// Market test repo
-// ---------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // Market test repo
+  // ---------------------------------------------------------------------------
 
-describe('D1Repo — market tests', () => {
-  let repo: D1Repo;
-
-  beforeEach(async () => {
-    await applyMigrations(env.DB);
-    for (const table of ['signals', 'opportunities', 'leads', 'landing_pages', 'discovery_candidates', 'market_tests', 'signal_snapshots']) {
-      await env.DB.exec(`DELETE FROM ${table}`);
-    }
-    repo = new D1Repo(env.DB);
-  });
+  describe('D1Repo — market tests', () => {
 
   it('createMarketTest inserts a pending row', async () => {
     const now = new Date().toISOString();
@@ -493,24 +542,15 @@ describe('D1Repo — market tests', () => {
       signals: [],
     };
     // Should not throw — caller guarantees id exists after claimMarketTest
-    await expect(repo.completeMarketTest('no-such-id', result, new Date().toISOString())).resolves.toBeUndefined();
+     await expect(repo.completeMarketTest('no-such-id', result, new Date().toISOString())).resolves.toBeUndefined();
   });
-});
-
-// ---------------------------------------------------------------------------
-// Signal snapshots repo
-// ---------------------------------------------------------------------------
-
-describe('D1Repo — signal_snapshots', () => {
-  let repo: D1Repo;
-
-  beforeEach(async () => {
-    await applyMigrations(env.DB);
-    for (const table of ['signals', 'opportunities', 'leads', 'landing_pages', 'discovery_candidates', 'market_tests', 'signal_snapshots']) {
-      await env.DB.exec(`DELETE FROM ${table}`);
-    }
-    repo = new D1Repo(env.DB);
   });
+
+  // ---------------------------------------------------------------------------
+  // Signal snapshots repo
+  // ---------------------------------------------------------------------------
+
+  describe('D1Repo — signal_snapshots', () => {
 
   // ── signal_snapshots ──────────────────────────────────────────────────────
 
@@ -596,3 +636,5 @@ describe('D1Repo — signal_snapshots', () => {
     });
   });
 });
+});
+
