@@ -21,6 +21,7 @@
   import ConfigForm         from '$lib/components/ConfigForm.svelte';
   import DeployModal        from '$lib/components/DeployModal.svelte';
   import VelocityChart      from '$lib/components/VelocityChart.svelte';
+  import SyncBanner         from '$lib/components/SyncBanner.svelte';
 
   export let data: PageData;
 
@@ -64,9 +65,9 @@
   }
 
   // ── Sync status ─────────────────────────────────────────────────────────────
-  let syncRunning   = false;
+  let syncRunning      = false;
   let syncRunId: string | null = null;
-  let syncPollTimer: ReturnType<typeof setInterval> | null = null;
+  let syncIsFullPipeline = true;
   let syncMsg: { ok: boolean; text: string } | null = null;
   let syncMsgTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -87,31 +88,10 @@
 
   $: syncAge = lastRunAge(data.pipeline.runs);
 
-  async function pollSync() {
-    if (!syncRunId) return;
-    try {
-      const res  = await fetch(`/api/pipeline-status/${encodeURIComponent(syncRunId)}`);
-      if (!res.ok) return;
-      const body = await res.json() as { run: { finished_at: string | null; error: string | null; fresh_signals: number | null; analyzed_signals: number | null } | null };
-      if (body.run?.finished_at) {
-        if (syncPollTimer) { clearInterval(syncPollTimer); syncPollTimer = null; }
-        syncRunning = false;
-        syncRunId   = null;
-        await refresh();
-        if (body.run.error) {
-          showSyncMsg(false, `Error en sync: ${body.run.error.slice(0, 80)}`);
-        } else {
-          const fresh    = body.run.fresh_signals    ?? 0;
-          const analyzed = body.run.analyzed_signals ?? 0;
-          showSyncMsg(true, `Sync completado · ${fresh} señales nuevas · ${analyzed} analizadas`);
-        }
-      }
-    } catch { /* non-fatal */ }
-  }
-
   async function forceSync() {
     if (syncRunning) return;
     syncRunning = true;
+    syncIsFullPipeline = true;
     syncMsg = null;
     try {
       const res  = await fetch('/api/run-cron', { method: 'POST' });
@@ -125,19 +105,18 @@
     } catch (e) {
       syncRunning = false;
       showSyncMsg(false, `Error de red: ${e instanceof Error ? e.message : String(e)}`);
-      return;
     }
-    // Poll every 5s; give up after 10 min
-    if (syncPollTimer) clearInterval(syncPollTimer);
-    syncPollTimer = setInterval(pollSync, 5_000);
-    setTimeout(() => {
-      if (syncPollTimer) { clearInterval(syncPollTimer); syncPollTimer = null; }
-      if (syncRunning) {
-        syncRunning = false;
-        syncRunId   = null;
-        showSyncMsg(false, 'Sync tardó demasiado — comprueba el pipeline');
-      }
-    }, 600_000);
+  }
+
+  function onSyncComplete(event: CustomEvent<{ error: string | null }>) {
+    syncRunning = false;
+    syncRunId   = null;
+    if (event.detail.error) {
+      showSyncMsg(false, `Error en sync: ${event.detail.error.slice(0, 80)}`);
+    } else {
+      showSyncMsg(true, 'Sync completado');
+    }
+    showPipeline = true;
   }
 
   // ── Signal diversity map (segment → { sources, days }) ─────────────────────
@@ -218,6 +197,14 @@
     </div>
   {/if}
 
+  {#if syncRunning && syncRunId}
+    <SyncBanner
+      runId={syncRunId}
+      fullPipeline={syncIsFullPipeline}
+      on:complete={onSyncComplete}
+    />
+  {/if}
+
   <PipelineBar
     stages={pipelineStages}
     activeTab={activeTab}
@@ -229,6 +216,7 @@
       runs={data.pipeline.runs}
       collectors={data.pipeline.collectors}
       bySource={data.pipeline.bySource ?? []}
+      stepsByRun={data.pipeline.stepsByRun ?? {}}
       on:close={() => showPipeline = false}
     />
   {/if}
@@ -286,8 +274,8 @@
           activeSegments={data.config?.segments ?? {}}
           on:promoted={({ detail }) => {
             syncRunId = detail.run_id;
+            syncIsFullPipeline = false;
             syncRunning = true;
-            pollSync();
           }}
         />
         <div class="section-sep"></div>
