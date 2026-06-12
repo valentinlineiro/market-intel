@@ -9,6 +9,15 @@ export interface CronRun {
   error:            string | null;
 }
 
+export interface CronStep {
+  run_id:      string;
+  step:        string;
+  status:      'running' | 'done' | 'error';
+  started_at:  string;
+  finished_at: string | null;
+  detail:      Record<string, unknown> | null;
+}
+
 export interface VelocityRow {
   week:    string;
   segment: string;
