@@ -14,7 +14,7 @@ Show per-stage progress in real time during a manual sync, and expose the same p
 
 ### Data layer — `cron_steps` table
 
-New migration adds a `cron_steps` table:
+New migration `0015_add_cron_steps.sql` adds a `cron_steps` table:
 
 ```sql
 CREATE TABLE IF NOT EXISTS cron_steps (
@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS cron_steps (
   finished_at TEXT,
   detail_json TEXT,
   PRIMARY KEY (run_id, step),
-  FOREIGN KEY (run_id) REFERENCES cron_runs(id)
+  FOREIGN KEY (run_id) REFERENCES cron_log(id)
 );
 ```
 
@@ -33,9 +33,11 @@ CREATE TABLE IF NOT EXISTS cron_steps (
 `detail_json` carries per-step counts:
 - collect: `{ signals: number }`
 - friction: `{ analyzed: number }`
-- discovery: `{ candidates: number }`
+- discovery: `{ candidates: number, skipped?: true }`
 - score: `{ opps: number }`
-- snapshot: `{}`
+- snapshot: `{ skipped?: true }`
+
+**Skipped steps:** If a stage is intentionally skipped (e.g. `discovery` when `discoverTexts.length < 5` or `llm` is undefined; `snapshot` is never skipped in full cron but is omitted in focused sync), write `status = 'done'` with `{ skipped: true }` in the detail. This keeps the step row present for the UI to render rather than requiring special-case logic to handle missing rows.
 
 ### Application layer — `ICronLogRepo` and `runCronJob`
 
@@ -78,7 +80,7 @@ Step errors are recorded individually; a failed step still writes `error` status
 
 `upsertCronStep` uses `INSERT ... ON CONFLICT DO UPDATE` to handle both the initial `running` write and the final `done`/`error` update in one statement.
 
-`getCronSteps` returns rows ordered by `started_at ASC`.
+`getCronSteps` returns rows ordered by `started_at ASC`. The repo layer parses `detail_json` before returning, so callers receive `detail: Record<string, unknown> | null` rather than a raw string. `CronStep.detail` replaces `CronStep.detail_json` in the TypeScript type.
 
 ### API layer — `routes/cron.ts`
 
@@ -100,10 +102,12 @@ return json({ runs, collectors, bySource, stepsByRun: Object.fromEntries(
 
 Shown between the dashboard header and the pipeline tabs while a sync is running. Receives `runId` as a prop, polls `/api/pipeline-status/:runId` every 2 seconds, and derives step state from the response.
 
-Layout: a horizontal row of 5 stage nodes connected by lines, matching the visual design. Each node shows:
+Layout: a horizontal row of stage nodes connected by lines, matching the visual design. Each node shows:
 - Circle: `✓` (done, violet), `···` (running, pulsing), `○` (pending, dim)
 - Stage name below
-- Count below the name once the step is done
+- Count below the name once the step is done (skipped steps show `—`)
+
+**Adaptive node count:** the banner derives visible steps from the steps returned by the poll response. A full cron run yields all 5 nodes; a focused sync yields 3 (`collect`, `friction`, `score`). The banner never shows `discovery` or `snapshot` nodes as permanently pending for a focused sync — it only renders the nodes present in the step data. During the initial poll before any steps are written, the banner defaults to 5 nodes if the run trigger is `'scheduled'` or `'manual'` cron, and 3 nodes if it was triggered via `/discovery/promote`.
 
 The banner disappears when `run.finished_at` is set, then triggers `invalidateAll()` to refresh the dashboard. Emits a `complete` event so the dashboard can auto-open the drawer.
 
@@ -137,7 +141,7 @@ export interface CronStep {
   status:      CronStepStatus;
   started_at:  string;
   finished_at: string | null;
-  detail_json: string | null;
+  detail:      Record<string, unknown> | null;  // parsed by repo layer, never a raw string
 }
 ```
 
